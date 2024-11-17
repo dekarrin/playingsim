@@ -1,5 +1,6 @@
 from ..card import Card, Suit
 from ..deck import Deck
+from . import RulesError
 
 
 class Pile:
@@ -85,7 +86,7 @@ class Pile:
     
 
 # moves possible in Klondike Solitaire:
-# - draw from stock to waste (or flip over the waste pile, if it is empty)
+# - draw from stock to waste (flip over the waste pile first, if stock is empty)
 # - add to tableau, either 1 from waste top, 1 from foundation pile, or other tableau.
 # - add to foundation, either from waste top or tableau pile.
 
@@ -95,7 +96,6 @@ class Move:
         self.source = source
         self.dest = dest
         self.count = count
-
 
 class Game:
     """
@@ -108,7 +108,7 @@ class Game:
             deck = Deck()
             deck.shuffle()
         
-        self.starting_deck = deck
+        self.starting_deck = list(deck)
         self.draw_count = draw_count
         self.stock_pass_limit = stock_pass_limit
         self.tableau: list[Pile] = []
@@ -118,8 +118,21 @@ class Game:
 
         # build the tableau
         for pile_idx in range(num_piles):
-            p = Pile(self.stock.draw_n(pile_idx+1))
+            p = Pile(reversed(self.stock.draw_n(pile_idx+1)))
             self.tableau.append(p)
+
+        # pull first hand
+        self.draw_stock()
+
+    def draw_stock(self):
+        if len(self.stock) == 0:
+            raise RulesError("Cannot draw from empty stock")
+        for _ in range(self.draw_count):
+            if len(self.stock) == 0:
+                continue
+            c = self.stock.draw()
+            self.waste.insert(0, c)
+
 
     @property
     def hand(self) -> Deck:

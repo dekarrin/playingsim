@@ -1,0 +1,4 @@
+
+
+class RulesError(Exception):
+    pass
