@@ -1,4 +1,5 @@
-from ..card import Card
+from ..card import Card, Suit
+from ..deck import Deck
 
 
 class Pile:
@@ -81,6 +82,19 @@ class Pile:
     def empty(self) -> bool:
         """Return True if this pile is empty, False otherwise"""
         return len(self.shown) == 0 and len(self.hidden) == 0
+    
+
+# moves possible in Klondike Solitaire:
+# - draw from stock to waste (or flip over the waste pile, if it is empty)
+# - add to tableau, either 1 from waste top, 1 from foundation pile, or other tableau.
+# - add to foundation, either from waste top or tableau pile.
+
+
+class Move:
+    def __init__(self, source: str, dest: str, count: int):
+        self.source = source
+        self.dest = dest
+        self.count = count
 
 
 class Game:
@@ -88,6 +102,48 @@ class Game:
     The state of a game of Klondike Solitaire
     """
 
-    def __init__(self, draw_count: int=1, stock_pass_limit: int=0):
+    def __init__(self, draw_count: int=1, stock_pass_limit: int=0, deck: Deck | None=None, num_piles: int=7):
+        self.random_deck: bool = deck is None
+        if deck is None:
+            deck = Deck()
+            deck.shuffle()
+        
+        self.starting_deck = deck
         self.draw_count = draw_count
         self.stock_pass_limit = stock_pass_limit
+        self.tableau: list[Pile] = []
+        self.foundation: dict[Suit, list[Card]] = {s: [] for s in Suit}
+        self.stock: Deck = deck
+        self.waste: Deck = Deck(cards=[])
+
+        # build the tableau
+        for pile_idx in range(num_piles):
+            p = Pile(self.stock.draw_n(pile_idx+1))
+            self.tableau.append(p)
+
+    @property
+    def hand(self) -> Deck:
+        # return the currently viewed card(s) from the waste pile. Only the top
+        # card is playable.
+        return Deck(self.waste.top_n(self.draw_count, or_fewer=True))
+
+    @property
+    def rules(self) -> dict:
+        return {
+            'draw_count': self.draw_count,
+            'stock_pass_limit': self.stock_pass_limit,
+            'deck': {
+                'type': 'random' if self.random_deck else 'fixed',
+                'cards': [str(c) for c in self.starting_deck.cards]
+            },
+            'num_piles': len(self.tableau)
+        }
+    
+    @property
+    def state(self) -> dict:
+        return {
+            'tableau': [list(p.shown) for p in self.tableau],
+            'foundation': {s.name: list(cs) for s, cs in self.foundation.items()},
+            'stock': len(self.stock),
+            'waste': len(self.waste)
+        }
