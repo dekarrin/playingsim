@@ -17,6 +17,15 @@ class Suit(IntEnum):
     def __str__(self) -> str:
         return self.name.title()
     
+    def black(self) -> bool:
+        return self in (Suit.CLUBS, Suit.SPADES)
+    
+    def red(self) -> bool:
+        return self in (Suit.DIAMONDS, Suit.HEARTS)
+    
+    def color(self) -> str:
+        return "black" if self.black() else "red"
+    
 
 class Rank(IntEnum):
     """
@@ -77,4 +86,14 @@ class Card:
             return self.suit < other.suit
         else:
             return self.rank < other.rank
+        
+    def color(self) -> str:
+        return self.suit.color()
+    
+    def is_black(self) -> bool:
+        return self.suit.black()
+    
+    def is_red(self) -> bool:
+        return self.suit.red()
+    
 
