@@ -87,8 +87,10 @@ class Pile:
 
 # moves possible in Klondike Solitaire:
 # - draw from stock to waste (flip over the waste pile first, if stock is empty)
-# - add to tableau, either 1 from waste top, 1 from foundation pile, or other tableau.
-# - add to foundation, either from waste top or tableau pile.
+# - move stack - from one tableau pile to another
+# - take from waste to (tableau, foundation)
+# - take from foundation to (tableau, foundation)
+# - take from tableau to foundation
 
 
 class Move:
@@ -126,13 +128,21 @@ class Game:
 
     def draw_stock(self):
         if len(self.stock) == 0:
-            raise RulesError("Cannot draw from empty stock")
+            # TODO: if we have waste, flip it first if we can
+            if len(self.waste) == 0:
+                raise RulesError("Stock and waste piles are empty")
+            self.stock = self.waste
+        
         for _ in range(self.draw_count):
             if len(self.stock) == 0:
                 continue
             c = self.stock.draw()
             self.waste.insert(0, c)
 
+    @property
+    def running(self) -> bool:
+        # win cond is here - all cards in foundation piles
+        return not all([len(cs) == 13 for cs in self.foundation.values()])
 
     @property
     def hand(self) -> Deck:
