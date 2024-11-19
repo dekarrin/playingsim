@@ -4,6 +4,11 @@ class RulesError(Exception):
     pass
 
 
+class Player:
+    def next_move(self, state: any) -> any:
+        raise NotImplementedError('next_move not implemented')
+
+
 class Game:
 
     def take_turn(self, player: int, move: any) -> None:

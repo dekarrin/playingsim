@@ -1,5 +1,4 @@
-from .games import Game, RulesError
-from .player import Player
+from .games import Game, Player, RulesError
 
 
 def play_until_done(game: Game, players: list[Player]):
@@ -20,4 +19,3 @@ def play_until_done(game: Game, players: list[Player]):
         except RulesError as e:
             print("Illegal move: {!s}".format(e))
             print("Try again")
-        

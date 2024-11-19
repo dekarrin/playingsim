@@ -1,6 +1,7 @@
 from ..card import Card, Suit, Rank
 from ..deck import Deck
-from . import RulesError, Game as BaseGame
+from . import RulesError, Game as BaseGame, Player as BasePlayer
+from .. import cio
 
 from enum import Enum, auto
 
@@ -679,4 +680,22 @@ class Game(BaseGame):
         """Return the index of the player whose turn it is."""
         return 0
     
+
+class HumanPlayer(BasePlayer):
+
+    def __init__(self, rules: dict):
+        self.rules = rules
+
+    def next_move(self, s: State) -> Action:
+        print(s.board())
+
+        moves = [(m, str(m)) for i, m in enumerate(s.legal_moves())]
+        moves.append((-1, 'Give Up'))
+
+        m = cio.select('Select move', moves)
+
+        if m == -1:
+            return None
+        
+        return m
     
