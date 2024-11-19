@@ -4,7 +4,7 @@ class RulesError(Exception):
     pass
 
 
-class PlayableGame:
+class Game:
 
     def take_turn(self, player: int, move: any) -> None:
         """
@@ -45,5 +45,10 @@ class PlayableGame:
     @property
     def min_players(self) -> int:
         """Return the minimum number of players that can play this game."""
+        return 0
+    
+    @property
+    def current_player(self) -> int:
+        """Return the index of the player whose turn it is."""
         return 0
     

@@ -1,6 +1,6 @@
 from ..card import Card, Suit, Rank
 from ..deck import Deck
-from . import RulesError, PlayableGame
+from . import RulesError, Game as BaseGame
 
 from enum import Enum, auto
 
@@ -436,7 +436,7 @@ class State:
         return moves
 
 
-class Game(PlayableGame):
+class Game(BaseGame):
     """
     The state of a game of Klondike Solitaire
     """
@@ -673,4 +673,10 @@ class Game(PlayableGame):
     @property
     def min_players(self) -> int:
         return 1
+    
+    @property
+    def current_player(self) -> int:
+        """Return the index of the player whose turn it is."""
+        return 0
+    
     
