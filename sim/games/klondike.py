@@ -167,26 +167,40 @@ class TurnType(Enum):
     MOVE_TABLEAU_STACK = auto()
     MOVE_ONE = auto()
 
+    def __str__(self) -> str:
+        return self.name.title()
+
 
 class LocationType(Enum):
     TABLEAU = auto()
     FOUNDATION = auto()
     WASTE = auto()
 
+    def __str__(self) -> str:
+        return self.name.title()
 
 class Location:
     def __init__(self, type: LocationType):
         self.type = type
+
+    def __str__(self) -> str:
+        return str(self.type)
 
 class TableauPosition(Location):
     def __init__(self, pile: int):
         super().__init__(LocationType.TABLEAU)
         self.pile = pile
 
+    def __str__(self):
+        return f"tableau pile {self.pile}"
+
 
 class WastePosition(Location):
     def __init__(self):
         super().__init__(LocationType.WASTE)
+
+    def __str__(self):
+        return "waste pile"
 
 
 class FoundationPosition(Location):
@@ -194,15 +208,24 @@ class FoundationPosition(Location):
         super().__init__(LocationType.FOUNDATION)
         self.suit = suit
 
+    def __str__(self):
+        return f"{self.suit} foundation pile"
+
 
 class Action:
     def __init__(self, type: TurnType):
         self.type = type
 
+    def __str__(self) -> str:
+        return str(self.type)
+
 
 class DrawAction(Action):
     def __init__(self):
         super().__init__(TurnType.DRAW)
+
+    def __str__(self):
+        return "Draw a card"
 
 class MoveTableauStackAction(Action):
     def __init__(self, source_pile: int, dest_pile: int, count: int):
@@ -220,6 +243,9 @@ class MoveTableauStackAction(Action):
         self.source_pile = source_pile
         self.dest_pile = dest_pile
         self.count = count
+
+    def __str__(self):
+        return "Move stack of {:d} card{:s} from tableau pile {:d} to tableau pile {:d}".format(self.count, '' if self.count == 1 else 's', self.source_piel, self.dest_pile)
 
 
 class MoveOneAction(Action):
@@ -241,16 +267,20 @@ class MoveOneAction(Action):
         # moving to waste is always invalid
         elif self.dest.type == LocationType.WASTE:
             raise ValueError("Cannot move card to waste pile")
+        
+    def __str__(self):
+        return f"Move card from {self.source} to {self.dest}"
 
 
 class State:
-    def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0):
+    def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0, draw_count: int=0):
         self.tableau = tableau
         self.foundations = foundations
         self.stock = stock
         self.waste = waste
         self.current_stock_pass = current_stock_pass
-        self._pass_limit = pass_limit
+        self.pass_limit = pass_limit
+        self.draw_count = draw_count
 
     @property
     def remaining_stock_flips(self) -> int:
@@ -265,6 +295,81 @@ class State:
             current_stock_pass=self.current_stock_pass,
             pass_limit=self._pass_limit
         )
+    
+    def board(self, reveal_hidden=False) -> str:
+        """
+        Return a string representation of the current state of the board. This
+        is useful for debugging and for displaying the current state of the game
+        to a human player.
+        """
+
+        card_width = 2
+        border_width = 1
+        empty_char = '░'
+        back_char = '▒'
+        border_char = '|'
+
+        board = ''
+
+        # add foundation piles
+        foundation_offset = (card_width + border_width) * 3
+        board += ' ' * foundation_offset
+        for s in Suit:
+            f = self.foundations[s]
+            if f.top() is None:
+                board += empty_char + s.short()
+            else:
+                board += str(f.top())
+            board += ' ' * border_width
+        board += '\n'
+
+        # add a blank line
+        board += '\n'
+
+        border = border_char * border_width
+        back = back_char * card_width
+        empty_slot = empty_char * card_width
+        # add tableau piles, largest to smallest
+        for t in reversed(self.tableau):
+            if len(t) == 0:
+                board += empty_slot + '\n'
+            else:
+                # reverse iterate over tableau
+                for i, c in enumerate(reversed(t.hidden)):
+                    if reveal_hidden:
+                        board += str(c)
+                    else:
+                        board += back
+                    
+                    if i+1 < len(t.hidden):
+                        board += border
+                if len(t.hidden) > 0:
+                    board += ' '
+                for i, c in enumerate(reversed(t.shown)):
+                    board += str(c)
+                    if i+1 < len(t.shown):
+                        board += border
+                board += '\n'
+
+        # empty line
+        board += '\n'
+
+        # stock and waste
+        if len(self.stock) > 0:
+            board += back
+        else:
+            board += empty_slot
+        board += ' '
+        disp_waste = self.draw_count
+        if disp_waste > len(self.waste):
+            disp_waste = len(self.waste)
+        for i, c in enumerate(self.waste.top_n(disp_waste)):
+            board += str(c)
+            if i+1 < disp_waste:
+                board += border
+        board += '\n'
+
+        return board
 
 
 class Game(PlayableGame):
@@ -526,7 +631,8 @@ class Game(PlayableGame):
 
     @property
     def running(self) -> bool:
-        # TODO: return False if no more moves.
+        # TODO: return False if no more moves, get them from legal_moves and
+        # exclude non-bottom stack moves for calculation purposes.
         # win cond is here - all cards in foundation piles
         return not all([len(cs) == 13 for cs in self.foundation.values()])
 
@@ -556,7 +662,8 @@ class Game(PlayableGame):
             stock=self.stock.clone(),
             waste=self.waste.clone(),
             current_stock_pass=self.current_stock_pass,
-            pass_limit=self.stock_pass_limit
+            pass_limit=self.stock_pass_limit,
+            draw_count=self.draw_count
         )
     
     @property

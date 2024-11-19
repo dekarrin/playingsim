@@ -17,6 +17,9 @@ class Suit(IntEnum):
     def __str__(self) -> str:
         return self.name.title()
     
+    def short(self) -> str:
+        return self.name[0].upper()
+    
     def black(self) -> bool:
         return self in (Suit.CLUBS, Suit.SPADES)
     
@@ -30,7 +33,9 @@ class Suit(IntEnum):
 class Rank(IntEnum):
     """
     Rank is a standard French playing card rank of 1-13, with 1 called Ace and
-    11-13 called Jack, Queen, and King.
+    11-13 called Jack, Queen, and King. Note: for consistency purposes, the
+    TEN rank's short name is 'X' rather than 10, so all ranks are a single
+    character.
     """
     ACE = 1
     TWO = 2
@@ -50,8 +55,10 @@ class Rank(IntEnum):
         return self.name.title()
     
     def short(self) -> str:
-        if self.value <= 10:
+        if self.value < 10:
             return str(self.value)
+        elif self.value == 10:
+            return 'X'
         else:
             return self.name[0].upper()
 
@@ -67,7 +74,7 @@ class Card:
         self.rank = rank
 
     def __str__(self) -> str:
-        return f"{self.rank.short()}{self.suit.name[0].upper()}"
+        return f"{self.rank.short()}{self.suit.short()}"
     
     def __eq__(self, other) -> bool:
         if not isinstance(other, Card):
