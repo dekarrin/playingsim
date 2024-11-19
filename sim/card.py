@@ -55,7 +55,9 @@ class Rank(IntEnum):
         return self.name.title()
     
     def short(self) -> str:
-        if self.value < 10:
+        if self.value == 1:
+            return 'A'
+        elif self.value < 10:
             return str(self.value)
         elif self.value == 10:
             return 'X'

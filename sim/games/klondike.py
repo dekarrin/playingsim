@@ -67,6 +67,8 @@ class Pile:
         of the pile; the rest remain unrevealed and not known to the player
         unless Thoughtful Klondike rules are in effect.
         """
+        cards = list(cards)
+
         self.shown: list[Card] = []
         self.hidden: list[Card] = []
 
@@ -246,7 +248,7 @@ class MoveTableauStackAction(Action):
         self.count = count
 
     def __str__(self):
-        return "Move stack of {:d} card{:s} from tableau pile {:d} to tableau pile {:d}".format(self.count, '' if self.count == 1 else 's', self.source_piel, self.dest_pile)
+        return "Move stack of {:d} card{:s} from tableau pile {:d} to tableau pile {:d}".format(self.count, '' if self.count == 1 else 's', self.source_pile, self.dest_pile)
 
 
 class MoveOneAction(Action):
@@ -330,27 +332,30 @@ class State:
         border = border_char * border_width
         back = back_char * card_width
         empty_slot = empty_char * card_width
-        # add tableau piles, largest to smallest
-        for t in reversed(self.tableau):
-            if len(t) == 0:
-                board += empty_slot + '\n'
-            else:
-                # reverse iterate over tableau
-                for i, c in enumerate(reversed(t.hidden)):
-                    if reveal_hidden:
-                        board += str(c)
+        # add tableau piles, smallest to largest, vertically
+        tallest_pile = max([len(t) for t in self.tableau])
+        for i in range(tallest_pile):
+            for t in self.tableau:
+                if len(t) <= i:
+                    if i == 0:
+                        board += empty_slot
                     else:
-                        board += back
-                    
-                    if i+1 < len(t.hidden):
-                        board += border
-                if len(t.hidden) > 0:
-                    board += ' '
-                for i, c in enumerate(reversed(t.shown)):
-                    board += str(c)
-                    if i+1 < len(t.shown):
-                        board += border
-                board += '\n'
+                        board += ' ' * card_width
+                else:
+                    # are we on a hidden one or displayed one? we want to start
+                    # at the back, so start at hidden (if present)
+                    if i >= len(t.hidden):
+                        # we are actually on a SHOWN card
+                        shown_index = i - len(t.hidden)
+                        board += str(t.shown[-(shown_index+1)])
+                    else:
+                        # we are on a hidden card. easy.
+                        if reveal_hidden:
+                            board += str(t.hidden[-(i+1)])
+                        else:
+                            board += back
+                board += ' '
+            board += '\n'
 
         # empty line
         board += '\n'
@@ -364,7 +369,7 @@ class State:
         disp_waste = self.draw_count
         if disp_waste > len(self.waste):
             disp_waste = len(self.waste)
-        for i, c in enumerate(self.waste.top_n(disp_waste)):
+        for i, c in enumerate(self.waste.top_n(disp_waste, or_fewer=True)):
             board += str(c)
             if i+1 < disp_waste:
                 board += border
@@ -448,7 +453,7 @@ class Game(BaseGame):
             deck = Deck()
             deck.shuffle()
         
-        self.starting_deck = list(deck)
+        self.starting_deck = list(deck.cards)
         self.draw_count = draw_count
         self.stock_pass_limit = stock_pass_limit
         self.current_stock_pass = 1
@@ -635,7 +640,7 @@ class Game(BaseGame):
         # TODO: return False if no more moves, get them from legal_moves and
         # exclude non-bottom stack moves for calculation purposes.
         # win cond is here - all cards in foundation piles
-        return not all([len(cs) == 13 for cs in self.foundation.values()])
+        return not all(f.needs() is None for f in self.foundations.values())
 
     @property
     def hand(self) -> Deck:
@@ -650,7 +655,7 @@ class Game(BaseGame):
             'stock_pass_limit': self.stock_pass_limit,
             'deck': {
                 'type': 'random' if self.random_deck else 'fixed',
-                'cards': [str(c) for c in self.starting_deck.cards]
+                'cards': [str(c) for c in self.starting_deck]
             },
             'num_piles': len(self.tableau)
         }
