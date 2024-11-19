@@ -111,14 +111,14 @@ class Deck:
         card"""
         return self.cards.index(card, **kwargs)
     
-    def extend(self, cards: list[card.Card] | 'Deck'):
+    def extend(self, cards: 'list[card.Card] | Deck'):
         """Add multiple cards to the deck"""
         if isinstance(cards, Deck):
             self.extend(cards.cards)
         else:
             self.cards.extend(cards)
 
-    def insert(self, index: int, x: card.Card | list[card.Card] | 'Deck'):
+    def insert(self, index: int, x: 'card.Card | list[card.Card] | Deck'):
         """Insert a card at the given index"""
         if isinstance(x, card.Card):
             self.cards.insert(index, x)

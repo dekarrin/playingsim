@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sim.runner
 import sim.games.klondike as klondike_game
 import sim.player.klondike as klondike_player
