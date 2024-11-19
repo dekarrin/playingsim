@@ -371,35 +371,6 @@ class State:
 
         return board
 
-
-class Game(PlayableGame):
-    """
-    The state of a game of Klondike Solitaire
-    """
-
-    def __init__(self, draw_count: int=1, stock_pass_limit: int=0, deck: Deck | None=None, num_piles: int=7):
-        self.random_deck: bool = deck is None
-        if deck is None:
-            deck = Deck()
-            deck.shuffle()
-        
-        self.starting_deck = list(deck)
-        self.draw_count = draw_count
-        self.stock_pass_limit = stock_pass_limit
-        self.current_stock_pass = 1
-        self.tableau: list[Pile] = []
-        self.foundations: dict[Suit, Foundation] = {s: Foundation(s) for s in Suit}
-        self.stock: Deck = deck
-        self.waste: Deck = Deck(cards=[])
-
-        # build the tableau
-        for pile_idx in range(num_piles):
-            p = Pile(reversed(self.stock.draw_n(pile_idx+1)))
-            self.tableau.append(p)
-
-        # pull first hand
-        self.draw_stock()
-
     def legal_moves(self) -> list[Action]:
         """
         Return a list of all legal moves that can be made in the current state.
@@ -463,6 +434,35 @@ class Game(PlayableGame):
                     moves.append(MoveOneAction(FoundationPosition(s), TableauPosition(i)))
         
         return moves
+
+
+class Game(PlayableGame):
+    """
+    The state of a game of Klondike Solitaire
+    """
+
+    def __init__(self, draw_count: int=1, stock_pass_limit: int=0, deck: Deck | None=None, num_piles: int=7):
+        self.random_deck: bool = deck is None
+        if deck is None:
+            deck = Deck()
+            deck.shuffle()
+        
+        self.starting_deck = list(deck)
+        self.draw_count = draw_count
+        self.stock_pass_limit = stock_pass_limit
+        self.current_stock_pass = 1
+        self.tableau: list[Pile] = []
+        self.foundations: dict[Suit, Foundation] = {s: Foundation(s) for s in Suit}
+        self.stock: Deck = deck
+        self.waste: Deck = Deck(cards=[])
+
+        # build the tableau
+        for pile_idx in range(num_piles):
+            p = Pile(reversed(self.stock.draw_n(pile_idx+1)))
+            self.tableau.append(p)
+
+        # pull first hand
+        self.draw_stock()
 
 
     def take_turn(self, player: int, action: Action):
