@@ -3,7 +3,7 @@ from ..deck import Deck
 from . import RulesError, Game as BaseGame, Player as BasePlayer
 from .. import cio
 
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 
 
 class Foundation:
@@ -126,7 +126,7 @@ class Pile:
         last_card = bot_given
 
         if len(cards) > 1:
-            for c in cards[0:-1]:
+            for c in reversed(cards[0:-1]):
                 if c.color() == last_card.color() or c.rank != last_card.rank - 1:
                     raise ValueError("Given cards are not a valid stack")
                 last_card = c
@@ -165,13 +165,16 @@ class Pile:
         return p
 
 
-class TurnType(Enum):
+class TurnType(IntEnum):
     DRAW = auto()
-    MOVE_TABLEAU_STACK = auto()
     MOVE_ONE = auto()
+    MOVE_TABLEAU_STACK = auto()
 
     def __str__(self) -> str:
         return self.name.title()
+    
+    def __lt__(self, other: 'TurnType') -> bool:
+        return self.value < other.value
 
 
 class LocationType(Enum):
@@ -221,6 +224,19 @@ class Action:
 
     def __str__(self) -> str:
         return str(self.type)
+    
+    def __lt__(self, other: 'Action') -> bool:
+        if not isinstance(other, Action):
+            return False
+        return self.type < other.type
+
+    def __eq__(self, other: 'Action') -> bool:
+        if not isinstance(other, Action):
+            return False
+        return self.type == other.type
+
+    def __hash__(self) -> int:
+        return hash(self.type)
 
 
 class DrawAction(Action):
@@ -332,6 +348,9 @@ class State:
         border = border_char * border_width
         back = back_char * card_width
         empty_slot = empty_char * card_width
+        for i in range(len(self.tableau)):
+            board += str(i) + ": "
+        board += '\n'
         # add tableau piles, smallest to largest, vertically
         tallest_pile = max([len(t) for t in self.tableau])
         for i in range(tallest_pile):
@@ -361,11 +380,12 @@ class State:
         board += '\n'
 
         # stock and waste
+        board += '|'
         if len(self.stock) > 0:
-            board += back
+            board += str(len(self.stock)).zfill(2)
         else:
             board += empty_slot
-        board += ' '
+        board += '| '
         disp_waste = self.draw_count
         if disp_waste > len(self.waste):
             disp_waste = len(self.waste)
@@ -384,7 +404,7 @@ class State:
         moves = []
 
         # add draw action
-        if len(self.stock) > 0 or (len(self.waste) > 0 and (self.stock_pass_limit < 1 or self.current_stock_pass < self.stock_pass_limit)):
+        if len(self.stock) > 0 or (len(self.waste) > 0 and (self.pass_limit < 1 or self.current_stock_pass < self.pass_limit)):
             moves.append(DrawAction())
         
         # check all tableau piles for stack moves. iterate on destinations bc
@@ -515,6 +535,7 @@ class Game(BaseGame):
             elif self.stock_pass_limit > 0 and self.current_stock_pass >= self.stock_pass_limit:
                 raise RulesError("Already did {:d} stock pass{:s} this game".format(self.current_stock_pass, '' if self.current_stock_pass == 1 else 'es'))
             self.stock = self.waste
+            self.stock.flip()
             self.current_stock_pass += 1
             self.waste = Deck(cards=[])
         
@@ -692,9 +713,10 @@ class HumanPlayer(BasePlayer):
         self.rules = rules
 
     def next_move(self, s: State) -> Action:
+        cio.clear()
         print(s.board())
 
-        moves = [(m, str(m)) for i, m in enumerate(s.legal_moves())]
+        moves = [(m, str(m)) for m in s.legal_moves()]
         moves.append((-1, 'Give Up'))
 
         m = cio.select('Select move', moves)

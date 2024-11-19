@@ -35,6 +35,10 @@ class Deck:
         import random
         random.shuffle(self.cards)
 
+    def flip(self):
+        """Flip the deck, reversing the order of the cards"""
+        self.cards.reverse()
+
     def draw(self) -> card.Card:
         """Draw a card from the deck"""
         if len(self) < 1:

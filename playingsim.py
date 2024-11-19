@@ -2,6 +2,7 @@
 
 import sim.runner
 import sim.games.klondike as klondike
+from sim.card import Card
 
 
 def main():

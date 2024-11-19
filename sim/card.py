@@ -29,6 +29,19 @@ class Suit(IntEnum):
     def color(self) -> str:
         return "black" if self.black() else "red"
     
+    @classmethod
+    def parse(cls, s: str) -> 'Suit':
+        if s.upper() == 'C' or s.upper() == 'CLUBS':
+            return cls.CLUBS
+        elif s.upper() == 'D' or s.upper() == 'DIAMONDS':
+            return cls.DIAMONDS
+        elif s.upper() == 'H' or s.upper() == 'HEARTS':
+            return cls.HEARTS
+        elif s.upper() == 'S' or s.upper() == 'SPADES':
+            return cls.SPADES
+        else:
+            raise ValueError(f"Invalid suit: {s}")
+    
 
 class Rank(IntEnum):
     """
@@ -63,6 +76,37 @@ class Rank(IntEnum):
             return 'X'
         else:
             return self.name[0].upper()
+        
+    @classmethod
+    def parse(cls, s: str) -> 'Rank':
+        if s.upper() in ['A', 'ACE', 'ONE', '1']:
+            return cls.ACE
+        elif s.upper() == '2' or s.upper() == 'TWO':
+            return cls.TWO
+        elif s.upper() == '3' or s.upper() == 'THREE':
+            return cls.THREE
+        elif s.upper() == '4' or s.upper() == 'FOUR':
+            return cls.FOUR
+        elif s.upper() == '5' or s.upper() == 'FIVE':
+            return cls.FIVE
+        elif s.upper() == '6' or s.upper() == 'SIX':
+            return cls.SIX
+        elif s.upper() == '7' or s.upper() == 'SEVEN':
+            return cls.SEVEN
+        elif s.upper() == '8' or s.upper() == 'EIGHT':
+            return cls.EIGHT
+        elif s.upper() == '9' or s.upper() == 'NINE':
+            return cls.NINE
+        elif s.upper() == '10' or s.upper() == 'TEN' or s.upper() == 'X':
+            return cls.TEN
+        elif s.upper() == 'J' or s.upper() == 'JACK':
+            return cls.JACK
+        elif s.upper() == 'Q' or s.upper() == 'QUEEN':
+            return cls.QUEEN
+        elif s.upper() == 'K' or s.upper() == 'KING':
+            return cls.KING
+        else:
+            raise ValueError(f"Invalid rank: {s}")
 
 
 class Card:
@@ -107,5 +151,12 @@ class Card:
     
     def clone(self) -> 'Card':
         return Card(self.suit, self.rank)
+    
+    @classmethod
+    def parse(cls, s: str) -> 'Card':
+        if len(s) != 2:
+            raise ValueError(f"Invalid card: {s}")
+        
+        return Card(Suit.parse(s[1]), Rank.parse(s[0]))
     
 
