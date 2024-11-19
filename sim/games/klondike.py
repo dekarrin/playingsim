@@ -1,7 +1,7 @@
 from ..card import Card, Suit, Rank
 from ..deck import Deck
 from . import RulesError, Game as BaseGame, Player as BasePlayer
-from .. import cio
+from .. import cio, UndoAction
 
 from enum import Enum, IntEnum, auto
 
@@ -198,7 +198,7 @@ class TableauPosition(Location):
         self.pile = pile
 
     def __str__(self):
-        return f"tableau pile {self.pile}"
+        return f"T{self.pile}"
 
 
 class WastePosition(Location):
@@ -215,7 +215,7 @@ class FoundationPosition(Location):
         self.suit = suit
 
     def __str__(self):
-        return f"{self.suit} foundation pile"
+        return f"{self.suit.name.lower()} pile"
 
 
 class Action:
@@ -264,7 +264,7 @@ class MoveTableauStackAction(Action):
         self.count = count
 
     def __str__(self):
-        return "Move stack of {:d} card{:s} from tableau pile {:d} to tableau pile {:d}".format(self.count, '' if self.count == 1 else 's', self.source_pile, self.dest_pile)
+        return "Move T{:d} -> T{:d}, stack of {:d}".format(self.source_pile, self.dest_pile, self.count)
 
 
 class MoveOneAction(Action):
@@ -288,7 +288,7 @@ class MoveOneAction(Action):
             raise ValueError("Cannot move card to waste pile")
         
     def __str__(self):
-        return f"Move card from {self.source} to {self.dest}"
+        return f"Move {self.source} card to {self.dest}"
 
 
 class State:
@@ -349,7 +349,7 @@ class State:
         back = back_char * card_width
         empty_slot = empty_char * card_width
         for i in range(len(self.tableau)):
-            board += str(i) + ": "
+            board += "T" + str(i) + " "
         board += '\n'
         # add tableau piles, smallest to largest, vertically
         tallest_pile = max([len(t) for t in self.tableau])
@@ -406,35 +406,8 @@ class State:
         # add draw action
         if len(self.stock) > 0 or (len(self.waste) > 0 and (self.pass_limit < 1 or self.current_stock_pass < self.pass_limit)):
             moves.append(DrawAction())
-        
-        # check all tableau piles for stack moves. iterate on destinations bc
-        # piles can legally take one of up to four cards, usually two, whereas
-        # piles can give any number of cards up to their revealed stack size.
-        for idx, dest in enumerate(self.tableau):
-            legal_stack_bots = dest.needs()
 
-            # now check if any other tableau pile has a stack with a legal card
-            # at any position.
-            for from_idx, source in enumerate(self.tableau):
-                if from_idx == idx:
-                    continue
-
-                for card_idx, candidate in enumerate(source.shown):
-                    if candidate in legal_stack_bots:
-                        moves.append(MoveTableauStackAction(from_idx, idx, card_idx+1))
-                        # not possible to have multiple moves from the same
-                        # source in Klondike, no need to check the rest
-                        break
-
-        # check tableau piles for single-card moves to foundation
-        for idx, source in enumerate(self.tableau):
-            if len(source.shown) == 0:
-                continue
-            for s in Suit:
-                if source.shown[0] == self.foundations[s].needs():
-                    moves.append(MoveOneAction(TableauPosition(idx), FoundationPosition(s)))
-        
-        # check waste pile for moves
+        # can we move from waste pile? add that one next if so
         if len(self.waste) > 0:
             card = self.waste.top
 
@@ -447,6 +420,39 @@ class State:
             for s in Suit:
                 if card == self.foundations[s].needs():
                     moves.append(MoveOneAction(WastePosition(), FoundationPosition(s)))
+        
+        # check tableau piles for single-card moves to foundation
+        for idx, source in enumerate(self.tableau):
+            if len(source.shown) == 0:
+                continue
+            for s in Suit:
+                if source.shown[0] == self.foundations[s].needs():
+                    moves.append(MoveOneAction(TableauPosition(idx), FoundationPosition(s)))
+        
+        
+        # check all tableau piles for stack moves. iterate on destinations bc
+        # piles can legally take one of up to four cards, usually two, whereas
+        # piles can give any number of cards up to their revealed stack size.
+        tableau_moves = list()
+        for idx, dest in enumerate(self.tableau):
+            legal_stack_bots = dest.needs()
+
+            # now check if any other tableau pile has a stack with a legal card
+            # at any position.
+            for from_idx, source in enumerate(self.tableau):
+                if from_idx == idx:
+                    continue
+
+                for card_idx, candidate in enumerate(source.shown):
+                    if candidate in legal_stack_bots:
+                        tableau_moves.append(MoveTableauStackAction(from_idx, idx, card_idx+1))
+                        # not possible to have multiple moves from the same
+                        # source in Klondike, no need to check the rest
+                        break
+
+        # sort them so we actually get in FROM order first, followed by TO
+        tableau_moves.sort(key=lambda m: (m.source_pile, m.dest_pile))
+        moves.extend(tableau_moves)
 
         # check foundation piles for moves
         for s in Suit:
@@ -481,14 +487,14 @@ class Game(BaseGame):
         self.foundations: dict[Suit, Foundation] = {s: Foundation(s) for s in Suit}
         self.stock: Deck = deck
         self.waste: Deck = Deck(cards=[])
+        self.history: list[State] = []
 
         # build the tableau
         for pile_idx in range(num_piles):
             p = Pile(reversed(self.stock.draw_n(pile_idx+1)))
             self.tableau.append(p)
-
-        # pull first hand
-        self.draw_stock()
+        
+        self.history.append(self.state)
 
 
     def take_turn(self, player: int, action: Action):
@@ -545,6 +551,8 @@ class Game(BaseGame):
             c = self.stock.draw()
             self.waste.insert(0, c)
 
+        self.history.append(self.state)
+
     def move_tableau_stack(self, source_pile: int, dest_pile: int, count: int):
         if source_pile < 0 or source_pile >= len(self.tableau):
             raise ValueError("Invalid source tableau pile")
@@ -568,6 +576,8 @@ class Game(BaseGame):
         
         cards = self.tableau[source_pile].take(count)
         self.tableau[dest_pile].give(cards)
+
+        self.history.append(self.state)
 
     def move_tableau_card(self, source_pile: int, dest: Location):
         if dest.type == LocationType.TABLEAU:
@@ -593,6 +603,8 @@ class Game(BaseGame):
             f.add(c)
         else:
             raise ValueError("Invalid destination location")
+        
+        self.history.append(self.state)
         
     def move_waste_card(self, dest: Location):
         """
@@ -630,6 +642,8 @@ class Game(BaseGame):
         else:
             raise RulesError("Waste pile cards may only be moved to a tableau or foundation pile")
         
+        self.history.append(self.state)
+        
     def move_foundation_card(self, suit: Suit, dest: Location):
         if dest.type == LocationType.TABLEAU:
             tdest: TableauPosition = dest
@@ -654,6 +668,21 @@ class Game(BaseGame):
         else:
             raise ValueError("Invalid destination location")
         
+        self.history.append(self.state)
+
+    def undo(self):
+        if len(self.history) < 2:
+            raise RulesError("At start of game; nothing to undo")
+        
+        self.history.pop()
+        last = self.history[-1]
+        
+        # restore all state from the last state
+        self.tableau = list(p.clone() for p in last.tableau)
+        self.foundations = {s: f.clone() for s, f in last.foundations.items()}
+        self.waste = last.waste.clone()
+        self.stock = last.stock.clone()
+        self.current_stock_pass = last.current_stock_pass
 
 
     @property
@@ -717,12 +746,18 @@ class HumanPlayer(BasePlayer):
         print(s.board())
 
         moves = [(m, str(m)) for m in s.legal_moves()]
-        moves.append((-1, 'Give Up'))
 
-        m = cio.select('Select move', moves)
+        non_number_options = [
+            ('U', -1, 'Undo'),
+            ('C', -2, 'Give up'),
+        ]
 
-        if m == -1:
+        m = cio.select('Select move', moves, non_number_options)
+
+        if m == -2:
             return None
-        
-        return m
+        elif m == -1:
+            return UndoAction()
+        else:
+            return m
     

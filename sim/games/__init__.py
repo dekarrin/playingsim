@@ -18,6 +18,10 @@ class Game:
         """
         raise NotImplementedError()
     
+    def undo(self) -> None:
+        """Undo the most recent move."""
+        raise NotImplementedError()
+    
     @property
     def running(self) -> bool:
         """Return whether the game is still running. Return False if the game

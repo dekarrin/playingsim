@@ -1,4 +1,5 @@
 from .games import Game, Player, RulesError
+from . import UndoAction, cio
 
 
 def play_until_done(game: Game, players: list[Player]):
@@ -13,9 +14,13 @@ def play_until_done(game: Game, players: list[Player]):
         if m is None:
             print("Player {:d} gave up".format(game.current_player))
             return
-        
+    
         try:
-            game.take_turn(game.current_player, m)
+            if m == UndoAction():
+                game.undo()
+            else:
+                game.take_turn(game.current_player, m)
         except RulesError as e:
             print("Illegal move: {!s}".format(e))
-            print("Try again")
+            cio.pause()
+            
