@@ -96,4 +96,7 @@ class Card:
     def is_red(self) -> bool:
         return self.suit.red()
     
+    def clone(self) -> 'Card':
+        return Card(self.suit, self.rank)
+    
 

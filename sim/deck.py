@@ -88,6 +88,10 @@ class Deck:
                 raise ValueError("Not enough cards in the deck")
         return self.cards[n:]
     
+    def clone(self) -> 'Deck':
+        """Return a copy of this deck"""
+        return Deck([c.clone() for c in self.cards])
+    
     def __len__(self) -> int:
         return len(self.cards)
     

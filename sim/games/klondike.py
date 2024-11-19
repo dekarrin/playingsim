@@ -1,6 +1,6 @@
 from ..card import Card, Suit, Rank
 from ..deck import Deck
-from . import RulesError
+from . import RulesError, PlayableGame
 
 from enum import Enum, auto
 
@@ -48,6 +48,11 @@ class Foundation:
     
     def __len__(self) -> int:
         return len(self.cards)
+    
+    def clone(self) -> 'Foundation':
+        f = Foundation(self.suit)
+        f.cards = list([c.clone() for c in self.cards])
+        return f
 
 
 class Pile:
@@ -149,18 +154,45 @@ class Pile:
     def empty(self) -> bool:
         """Return True if this pile is empty, False otherwise"""
         return len(self.shown) == 0 and len(self.hidden) == 0
+    
+    def clone(self) -> 'Pile':
+        p = Pile([])
+        p.shown = list([c.clone() for c in self.shown])
+        p.hidden = list([c.clone() for c in self.hidden])
+        return p
 
 
 class TurnType(Enum):
     DRAW = auto()
-    MOVE_STACK = auto()
+    MOVE_TABLEAU_STACK = auto()
     MOVE_ONE = auto()
 
 
-class CardLocation(Enum):
+class LocationType(Enum):
     TABLEAU = auto()
     FOUNDATION = auto()
     WASTE = auto()
+
+
+class Location:
+    def __init__(self, type: LocationType):
+        self.type = type
+
+class TableauPosition(Location):
+    def __init__(self, pile: int):
+        super().__init__(LocationType.TABLEAU)
+        self.pile = pile
+
+
+class WastePosition(Location):
+    def __init__(self):
+        super().__init__(LocationType.WASTE)
+
+
+class FoundationPosition(Location):
+    def __init__(self, suit: Suit):
+        super().__init__(LocationType.FOUNDATION)
+        self.suit = suit
 
 
 class Action:
@@ -172,9 +204,9 @@ class DrawAction(Action):
     def __init__(self):
         super().__init__(TurnType.DRAW)
 
-class MoveStackAction(Action):
+class MoveTableauStackAction(Action):
     def __init__(self, source_pile: int, dest_pile: int, count: int):
-        super().__init__(TurnType.MOVE_STACK) 
+        super().__init__(TurnType.MOVE_TABLEAU_STACK)
 
         if source_pile == dest_pile:
             raise ValueError("Source and destination piles must be different")
@@ -191,44 +223,51 @@ class MoveStackAction(Action):
 
 
 class MoveOneAction(Action):
-    def __init__(self, source: CardLocation, dest: CardLocation, source_pile: int | None=None, dest_pile: int | None=None):
+    def __init__(self, source: Location, dest: Location):
         super().__init__(TurnType.MOVE_ONE)
         self.source = source
-        self.source_pile = source_pile
         self.dest = dest
-        self.dest_pile = dest_pile
 
         # TODO: make all these checks in rules validation in game engine as
         # well.
 
-        if self.dest == self.source:
-            # it's possible someone will encounter this error while trying to move 1 card between tableaus; they should use the stack move instead
+        if self.dest.type == self.source.type:
+            # only legal same-location would be tableau to tableau move, which
+            # is handled by MoveStackAction
+            if self.dest.type == LocationType.TABLEAU:
+                raise ValueError("Use MoveTableauStackAction to move cards between tableau piles")
             raise ValueError("Source and destination locations must be different")
         
-        if self.dest != CardLocation.TABLEAU and self.dest_pile is not None:
-            raise ValueError("Destination pile is only valid for moves to tableau")
-        elif self.dest == CardLocation.TABLEAU and self.dest_pile is None:
-            raise ValueError("Destination pile is required for moves to tableau")
-        if self.source != CardLocation.TABLEAU and self.source_pile is not None:
-            raise ValueError("Source pile is only valid for moves from tableau")
-        elif self.source == CardLocation.TABLEAU and self.source_pile is None:
-            raise ValueError("Source pile is required for moves from tableau")
-        
-        if self.dest_pile is not None and self.source_pile is not None and self.dest_pile == self.source_pile:
-            raise ValueError("Source and destination piles must be different")
-        
         # moving to waste is always invalid
-        elif self.dest == CardLocation.WASTE:
+        elif self.dest.type == LocationType.WASTE:
             raise ValueError("Cannot move card to waste pile")
 
 
-class Turn:
-    def __init__(self, action: Action, player: int=0):
-        self.action = action
-        self.player = player
+class State:
+    def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0):
+        self.tableau = tableau
+        self.foundations = foundations
+        self.stock = stock
+        self.waste = waste
+        self.current_stock_pass = current_stock_pass
+        self._pass_limit = pass_limit
+
+    @property
+    def remaining_stock_flips(self) -> int:
+        return self._pass_limit - self.current_stock_pass if self._pass_limit > 0 else -1
+    
+    def clone(self) -> 'State':
+        return State(
+            tableau=[t.clone() for t in self.tableau],
+            foundations={s: f.clone() for s, f in self.foundations.items()},
+            stock=self.stock.clone(),
+            waste=self.waste.clone(),
+            current_stock_pass=self.current_stock_pass,
+            pass_limit=self._pass_limit
+        )
 
 
-class Game:
+class Game(PlayableGame):
     """
     The state of a game of Klondike Solitaire
     """
@@ -242,8 +281,9 @@ class Game:
         self.starting_deck = list(deck)
         self.draw_count = draw_count
         self.stock_pass_limit = stock_pass_limit
+        self.current_stock_pass = 1
         self.tableau: list[Pile] = []
-        self.foundations: dict[Suit, Foundation] = {s: [] for s in Suit}
+        self.foundations: dict[Suit, Foundation] = {s: Foundation(s) for s in Suit}
         self.stock: Deck = deck
         self.waste: Deck = Deck(cards=[])
 
@@ -255,13 +295,52 @@ class Game:
         # pull first hand
         self.draw_stock()
 
+    def take_turn(self, player: int, action: Action):
+        """
+        Performs the given turn, if it is legal. If not, a RulesError will be
+        raised. If there is a problem with an argument, a ValueError will be
+        raised.
+        """
+        if player != 0:
+            raise RulesError("Klondike Solitaire is a single-player game; player index must be 0")
+        
+        if action.type == TurnType.DRAW:
+            if not isinstance(action, DrawAction):
+                raise ValueError("DrawAction required for DRAW turn type")
+            
+            self.draw_stock()
+        elif action.type == TurnType.MOVE_TABLEAU_STACK:
+            if not isinstance(action, MoveTableauStackAction):
+                raise ValueError("MoveTableauStackAction required for MOVE_TABLEAU_STACK turn type")
+            
+            act: MoveTableauStackAction = action
+            self.move_tableau_stack(act.source_pile, act.dest_pile, act.count)
+        elif action.type == TurnType.MOVE_ONE:
+            if not isinstance(action, MoveOneAction):
+                raise ValueError("MoveOneAction required for MOVE_ONE turn type")
+            
+            act: MoveOneAction = action
+            if act.source.type == LocationType.TABLEAU:
+                if not isinstance(act.source, TableauPosition):
+                    raise ValueError("TableauPosition required for source location")
+                self.move_tableau_card(act.source.pile, act.dest)
+            elif act.source.type == LocationType.WASTE:
+                self.move_waste_card(act.dest)
+            elif act.source.type == LocationType.FOUNDATION:
+                self.move_foundation_card(act.source.suit, act.dest)
+            else:
+                raise ValueError("Invalid source location")
+
     def draw_stock(self):
-        # TODO: limit by passes
         if len(self.stock) == 0:
             # if we have waste, flip it first if we can
             if len(self.waste) == 0:
                 raise RulesError("Stock and waste piles are empty")
+            elif self.stock_pass_limit > 0 and self.current_stock_pass >= self.stock_pass_limit:
+                raise RulesError("Already did {:d} stock pass{:s} this game".format(self.current_stock_pass, '' if self.current_stock_pass == 1 else 'es'))
             self.stock = self.waste
+            self.current_stock_pass += 1
+            self.waste = Deck(cards=[])
         
         for _ in range(self.draw_count):
             if len(self.stock) == 0:
@@ -293,19 +372,22 @@ class Game:
         cards = self.tableau[source_pile].take(count)
         self.tableau[dest_pile].give(cards)
 
-    def move_tableau_card(self, source_pile: int, dest: CardLocation):
-        if dest == CardLocation.TABLEAU:
+    def move_tableau_card(self, source_pile: int, dest: Location):
+        if dest.type == LocationType.TABLEAU:
             raise RulesError("Use move_tableau_stack to move cards to tableau")
-        elif dest == CardLocation.WASTE:
+        elif dest.type == LocationType.WASTE:
             raise RulesError("Cannot move cards to waste pile")
-        elif dest == CardLocation.FOUNDATION:
+        elif dest.type == LocationType.FOUNDATION:
+            fdest: FoundationPosition = dest
+
             if source_pile < 0 or source_pile >= len(self.tableau):
                 raise ValueError("Invalid source tableau pile")
 
             t = self.tableau[source_pile]
             card = t.top()
+            
             # get the foundation to move it to
-            f = self.foundations[card.suit]
+            f = self.foundations[fdest.suit]
             expected = f.needs()
             if card != expected:
                 raise RulesError("Cannot add {:s} to {:s} foundation pile; legal cards are {:s}".format(str(card), f.suit.name, str(expected)))
@@ -315,31 +397,33 @@ class Game:
         else:
             raise ValueError("Invalid destination location")
         
-    def move_waste_card(self, dest: CardLocation, dest_pile: int | None=None):
+    def move_waste_card(self, dest: Location):
         """
         Move the card at the top of the waste pile to the given location.
         """
-        if dest != CardLocation.TABLEAU and dest_pile is not None:
-            raise ValueError("Destination pile is only valid for moves to tableau")
         
-        if dest == CardLocation.TABLEAU:
-            if dest_pile is None:
+        if dest.type == LocationType.TABLEAU:
+            tdest: TableauPosition = dest
+
+            if tdest.pile is None:
                 raise ValueError("Destination pile is required for moves to tableau")
-            if dest_pile < 0 or dest_pile >= len(self.tableau):
-                raise ValueError("Invalid destination tableau pile")
+            if tdest.pile < 0 or tdest.pile >= len(self.tableau):
+                raise RulesError("Invalid destination tableau pile; legal piles are 0 through {:d}".format(len(self.tableau)-1))
             
-            t = self.tableau[dest_pile]
+            t = self.tableau[tdest.pile]
             card = self.waste.top
 
             if card not in t.needs():
-                raise RulesError("Cannot add {:s} to tableau[{:d}]; legal cards are {:s}".format(str(card), dest_pile, ', '.join([str(c) for c in t.needs()])))
+                raise RulesError("Cannot add {:s} to tableau[{:d}]; legal cards are {:s}".format(str(card), tdest.pile, ', '.join([str(c) for c in t.needs()])))
             
             c = self.waste.draw()
             t.give([c])
-        elif dest == CardLocation.FOUNDATION:
+        elif dest.type == LocationType.FOUNDATION:
+            fdest: FoundationPosition = dest
+
             card = self.waste.top
             # get the foundation to move it to
-            f = self.foundations[card.suit]
+            f = self.foundations[fdest.suit]
             expected = f.needs()
             if card != expected:
                 raise RulesError("Cannot add {:s} to {:s} foundation pile; legal cards are {:s}".format(str(card), f.suit.name, str(expected)))
@@ -349,32 +433,35 @@ class Game:
         else:
             raise RulesError("Waste pile cards may only be moved to a tableau or foundation pile")
         
-    def move_foundation_card(self, source_suit: Suit, dest: CardLocation, dest_pile: int):
-        if dest == CardLocation.TABLEAU:
-            if dest_pile is None:
-                raise ValueError("Destination pile is required for moves to tableau")
-            if dest_pile < 0 or dest_pile >= len(self.tableau):
-                raise ValueError("Invalid destination tableau pile")
-            
-             = self.tableau[dest_pile]
+    def move_foundation_card(self, suit: Suit, dest: Location):
+        if dest.type == LocationType.TABLEAU:
+            tdest: TableauPosition = dest
 
+            if tdest.pile is None:
+                raise ValueError("Destination pile is required for moves to tableau")
+            if tdest.pile < 0 or tdest.pile >= len(self.tableau):
+                raise RulesError("Invalid destination tableau pile; legal piles are 0 through {:d}".format(len(self.tableau)-1))
+            
+            t = self.tableau[tdest.pile]
+
+            card = self.foundations[suit].top()
             if card not in t.needs():
-                raise RulesError("Cannot add {:s} to tableau[{:d}]; legal cards are {:s}".format(str(card), dest_pile, ', '.join([str(c) for c in t.needs()])))
+                raise RulesError("Cannot add {:s} to tableau[{:d}]; legal cards are {:s}".format(str(card), tdest.pile, ', '.join([str(c) for c in t.needs()])))
             
             c = self.waste.draw()
             t.give([c])
-        elif dest == CardLocation.WASTE:
+        elif dest.type == LocationType.WASTE:
             raise RulesError("Cannot move cards from foundation to waste")
-        elif dest == CardLocation.FOUNDATION:
+        elif dest.type == LocationType.FOUNDATION:
             raise RulesError("Cannot move cards from foundation to foundation")
         else:
             raise ValueError("Invalid destination location")
-            
-            
+        
 
 
     @property
     def running(self) -> bool:
+        # TODO: return False if no more moves.
         # win cond is here - all cards in foundation piles
         return not all([len(cs) == 13 for cs in self.foundation.values()])
 
@@ -397,14 +484,15 @@ class Game:
         }
     
     @property
-    def state(self) -> dict:
-        # come back to this; tableau needs supplementary info
-        return {
-            'tableau': [list(p.shown) for p in self.tableau],
-            'foundation': {s.name: list(self.foundations[s].cards) for s in self.foundations},
-            'stock': len(self.stock),
-            'waste': len(self.waste)
-        }
+    def state(self) -> State:
+        return State(
+            tableau=[t.clone() for t in self.tableau],
+            foundations={s: f.clone() for s, f in self.foundations.items()},
+            stock=self.stock.clone(),
+            waste=self.waste.clone(),
+            current_stock_pass=self.current_stock_pass,
+            pass_limit=self.stock_pass_limit
+        )
     
     @property
     def max_players(self) -> int:
