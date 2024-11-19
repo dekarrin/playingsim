@@ -295,6 +295,71 @@ class Game(PlayableGame):
         # pull first hand
         self.draw_stock()
 
+    def legal_moves(self) -> list[Action]:
+        """
+        Return a list of all legal moves that can be made in the current state.
+        """
+        moves = []
+
+        # add draw action
+        if len(self.stock) > 0 or (len(self.waste) > 0 and (self.stock_pass_limit < 1 or self.current_stock_pass < self.stock_pass_limit)):
+            moves.append(DrawAction())
+        
+        # check all tableau piles for stack moves. iterate on destinations bc
+        # piles can legally take one of up to four cards, usually two, whereas
+        # piles can give any number of cards up to their revealed stack size.
+        for idx, dest in enumerate(self.tableau):
+            legal_stack_bots = dest.needs()
+
+            # now check if any other tableau pile has a stack with a legal card
+            # at any position.
+            for from_idx, source in enumerate(self.tableau):
+                if from_idx == idx:
+                    continue
+
+                for card_idx, candidate in enumerate(source.shown):
+                    if candidate in legal_stack_bots:
+                        moves.append(MoveTableauStackAction(from_idx, idx, card_idx+1))
+                        # not possible to have multiple moves from the same
+                        # source in Klondike, no need to check the rest
+                        break
+
+        # check tableau piles for single-card moves to foundation
+        for idx, source in enumerate(self.tableau):
+            if len(source.shown) == 0:
+                continue
+            for s in Suit:
+                if source.shown[0] == self.foundations[s].needs():
+                    moves.append(MoveOneAction(TableauPosition(idx), FoundationPosition(s)))
+        
+        # check waste pile for moves
+        if len(self.waste) > 0:
+            card = self.waste.top
+
+            # to tableau
+            for i, dest in enumerate(self.tableau):
+                if card in dest.needs():
+                    moves.append(MoveOneAction(WastePosition(), TableauPosition(i)))
+
+            # to foundation
+            for s in Suit:
+                if card == self.foundations[s].needs():
+                    moves.append(MoveOneAction(WastePosition(), FoundationPosition(s)))
+
+        # check foundation piles for moves
+        for s in Suit:
+            f = self.foundations[s]
+            if len(f) == 0:
+                continue
+            card = f.top()
+
+            for i, dest in enumerate(self.tableau):
+                if card in dest.needs():
+                    moves.append(MoveOneAction(FoundationPosition(s), TableauPosition(i)))
+        
+        return moves
+
+
     def take_turn(self, player: int, action: Action):
         """
         Performs the given turn, if it is legal. If not, a RulesError will be
