@@ -464,6 +464,8 @@ class State:
         disp_waste = self.draw_count
         if disp_waste > len(self.waste):
             disp_waste = len(self.waste)
+        
+        board += "TOP:"
         for i, c in enumerate(self.waste.top_n(disp_waste, or_fewer=True)):
             board += str(c)
             if i+1 < disp_waste:
