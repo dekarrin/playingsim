@@ -314,7 +314,65 @@ class State:
 
     @property
     def remaining_stock_flips(self) -> int:
-        return self._pass_limit - self.current_stock_pass if self._pass_limit > 0 else -1
+        return self.pass_limit - self.current_stock_pass if self.pass_limit > 0 else -1
+    
+    @property
+    def accessible_stock_cards(self) -> list[Card]:
+        """
+        Return the stock cards that the player could currently access, either by
+        drawing to it via zero or one flip or by it being the current face-up
+        card. Note that this will only include cards the player has drawn at
+        least once.
+        """
+
+        accessibles = list()
+
+        # Include the card currently in the waste pile, if there is one:
+        if len(self.waste) > 0:
+            accessibles.append(self.waste.top)
+
+        if len(self.stock) > 0 and self.current_stock_pass > 1:
+            # Include every nth card remaining in stock, where n is the draw_count:
+            for i in range(0, len(self.stock), self.draw_count):
+                accessibles.append(self.stock[i])
+
+            # if remaining stock cards is not divisible by draw_count, the last card
+            # needs to be added as well:
+            if len(self.stock) % self.draw_count != 0:
+                accessibles.append(self.stock[-1])
+
+        # if there are waste-pile cards under the top one that could be revealed
+        # with a flip (DEFINED AS len(waste) > draw_count),
+        # we need to also
+        # simulate flipping the waste pile and checking cards accessible that
+        # way.
+        if len(self.waste) > self.draw_count and self.remaining_stock_flips > 0:
+            original_top = len(self.waste) - 1
+            next_waste = self.waste.clone()
+
+            shifted_waste = len(self.waste) % self.draw_count != 0
+            if shifted_waste and self.current_stock_pass > 1 and len(self.stock) > 0:
+                # we have seen the remainder of stock and the flip would shift
+                # things so add all cards that would become accessible on next
+                # flip, including rest of stock.
+                stock_copy = self.stock.clone()
+        
+                for _ in range(self.draw_count):
+                    if len(stock_copy) == 0:
+                        break
+                    c = stock_copy.draw()
+                    next_waste.insert(0, c)
+
+            flipped_stock = next_waste.flip()
+            for i in range(0, len(flipped_stock), self.draw_count):
+                if i == original_top:
+                    # don't include the top card twice
+                    continue
+                accessibles.append(flipped_stock[i])
+            
+            # already did last-card check, don't need to do so again.
+
+        return accessibles
     
     def clone(self) -> 'State':
         return State(
@@ -323,7 +381,7 @@ class State:
             stock=self.stock.clone(),
             waste=self.waste.clone(),
             current_stock_pass=self.current_stock_pass,
-            pass_limit=self._pass_limit
+            pass_limit=self.pass_limit
         )
     
     def board(self, reveal_hidden=False) -> str:
@@ -405,6 +463,15 @@ class State:
             if i+1 < disp_waste:
                 board += border
         board += '\n'
+
+        # print out accessibles for testing purposes
+        board += '\nACCESSIBLES:\n['
+        acc_str = ''
+        for c in self.accessible_stock_cards:
+            acc_str += ',' + str(c)
+        if len(acc_str) > 0:
+            acc_str = acc_str[1:]
+        board += acc_str + ']\n'
 
         return board
 
@@ -558,7 +625,7 @@ class Game(BaseGame):
         
         for _ in range(self.draw_count):
             if len(self.stock) == 0:
-                continue
+                break
             c = self.stock.draw()
             self.waste.insert(0, c)
 
@@ -715,32 +782,14 @@ class Game(BaseGame):
         # stock, which will only be player knowledge if they've been through it
         # at least once. Ergo, no-useful-move detection can only be done if the
         # pass limit is > 1 and the stock has been gone through at least once.
-        elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit > 1):
-            st = self.state
-            moves = st.legal_moves()
+        
+        # elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit > 1):
+        #     st = self.state
+        #     moves = st.legal_moves()
+        #
+        #     if len(moves) == 0:
+        #         return False
 
-            if len(moves) == 0:
-                return False
-
-            only_stack_split_and_draw_moves_avail = True
-            for m in moves:
-                if m.type == TurnType.MOVE_TABLEAU_STACK:
-                    stack_move: MoveTableauStackAction = m
-                    if not stack_move.splits_stack(st):
-                        only_stack_split_and_draw_moves_avail = False
-                        break
-                elif m.type != TurnType.DRAW:
-                    only_stack_split_and_draw_moves_avail = False
-                    break
-
-            # if there's only stack split and/or draw moves, the only way to
-            # advance is if the stock is known to have cards to draw that could
-            # advance the game. The stock will only be known if it has
-            # been gone through at least once; if it hasn't, we shouldn't look
-            # ahead because the user wouldn't know.
-
-
-        # Never mind the entire above section, rigorous definition:
         #
         # definition of no useful moves remaining using only knowledge that
         # player would have, generalized to multiple decks. NOT generalized to 1-pass limit over
