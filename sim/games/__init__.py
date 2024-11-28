@@ -3,6 +3,18 @@
 class RulesError(Exception):
     pass
 
+# RESULT object
+# {
+#   outcome: "DRAW", "WIN", "LOSS"
+#   winners: [0, 0]
+# }
+
+class Result:
+    def __init__(self, winners: list[int] | None=None, draw: bool=False, loss: bool=False):
+        self.winners = winners
+        self.is_draw = draw
+        self.is_loss = loss
+
 
 class Player:
     def next_move(self, state: any) -> any:
@@ -10,7 +22,6 @@ class Player:
 
 
 class Game:
-
     def take_turn(self, player: int, move: any) -> None:
         """
         Take turn executes the given move for the given player. The move
@@ -20,6 +31,11 @@ class Game:
     
     def undo(self) -> None:
         """Undo the most recent move."""
+        raise NotImplementedError()
+    
+    @property
+    def outcome(self) -> Result | None:
+        """Return the outcome of the game, or None if the game is still running."""
         raise NotImplementedError()
     
     @property

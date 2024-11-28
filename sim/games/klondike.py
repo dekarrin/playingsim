@@ -1,6 +1,6 @@
 from ..card import Card, Suit, Rank
 from ..deck import Deck
-from . import RulesError, Game as BaseGame, Player as BasePlayer
+from . import RulesError, Game as BaseGame, Player as BasePlayer, Result
 from .. import cio, UndoAction
 
 from enum import Enum, IntEnum, auto
@@ -265,6 +265,17 @@ class MoveTableauStackAction(Action):
 
     def __str__(self):
         return "Move T{:d} -> T{:d}, stack of {:d}".format(self.source_pile, self.dest_pile, self.count)
+    
+    def splits_stack(self, state: 'State') -> bool:
+        """
+        Return True if this move splits a stack in the source pile, False
+        otherwise. While this is not a rules violation, if the ONLY possible
+        moves are to split a stack, and there is no foundation moves that would
+        reveal, and the deck has no playable cards, the game is unwinnable in
+        that state.
+        """
+        source_pile = state.tableau[self.source_pile]
+        return len(source_pile.shown) > self.count
 
 
 class MoveOneAction(Action):
@@ -684,14 +695,99 @@ class Game(BaseGame):
         self.stock = last.stock.clone()
         self.current_stock_pass = last.current_stock_pass
 
+    @property
+    def outcome(self) -> Result | None:
+        pass
+        # TODO: fill this in
+            
 
     @property
     def running(self) -> bool:
         # TODO: return False if no more moves, get them from legal_moves and
         # exclude non-bottom stack moves for calculation purposes.
         # win cond is here - all cards in foundation piles
-        return not all(f.needs() is None for f in self.foundations.values())
 
+        win_condition_met = all(f.needs() is None for f in self.foundations.values())
+        if win_condition_met:
+            return False
+        
+        # we can't determine if the game is unwinnable without looking ahead at
+        # stock, which will only be player knowledge if they've been through it
+        # at least once. Ergo, no-useful-move detection can only be done if the
+        # pass limit is > 1 and the stock has been gone through at least once.
+        elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit > 1):
+            st = self.state
+            moves = st.legal_moves()
+
+            if len(moves) == 0:
+                return False
+
+            only_stack_split_and_draw_moves_avail = True
+            for m in moves:
+                if m.type == TurnType.MOVE_TABLEAU_STACK:
+                    stack_move: MoveTableauStackAction = m
+                    if not stack_move.splits_stack(st):
+                        only_stack_split_and_draw_moves_avail = False
+                        break
+                elif m.type != TurnType.DRAW:
+                    only_stack_split_and_draw_moves_avail = False
+                    break
+
+            # if there's only stack split and/or draw moves, the only way to
+            # advance is if the stock is known to have cards to draw that could
+            # advance the game. The stock will only be known if it has
+            # been gone through at least once; if it hasn't, we shouldn't look
+            # ahead because the user wouldn't know.
+
+
+        # Never mind the entire above section, rigorous definition:
+        #
+        # definition of no useful moves remaining using only knowledge that
+        # player would have, generalized to multiple decks. NOT generalized to 1-pass limit over
+        # stock.
+        #
+        # - The stock has been through at least once
+        # - AND For all moves from a foundation, it is not true that:
+        #   - The move is to a tableau pile
+        #   - AND
+        #     - The card to be moved changes state such that the number of
+        #       playable-to cards of that card's color and rank would be less
+        #       than or equal to the number of currently playable opposite color
+        #       and -1 rank cards in stock or tableau or foundation.
+        #     - OR the move reveals a card which:
+        #       - Itself is playable to tableau
+        # - AND For all full-stack moves from tableau, it is not true that
+        #   - the move reveals a hidden card
+        #   - OR the move reveals a blank space such that the total number of
+        #     blank spaces would be less than/equal to the number of currently
+        #     playable kings in stock or tableau or foundation, AND the top of
+        #     stack is not a king.
+        # - AND For all non-full-stack moves from tableau, it is not true that:
+        #   - the move reveals a non-hidden card such that the total number of that
+        #     particular rank and color of card that can be played to would be
+        #     less than/equal to the number of currently playable opposite color
+        #     and -1 rank cards in stock or tableau or foundation, excluding the
+        #     top of the moved stack.
+        #   - OR the move reveals a non-hidden card which:
+        #     - Itself is playable to foundation
+        #     - OR is playable to another stack
+        #       - AND the revealed card is not a king on an empty.
+        # - AND For all moves to foundation from tableau, it is not true that:
+        #   - the move changes game state such that the number of playable-to
+        #     foundation piles of that card's exact rank and suit would be less
+        #     than/equal to the number of currently playable cards of the same
+        #     suit with rank +1 in stock or tableau or foundation.
+        #   - OR the move reveals a non-hidden card such that the total number of cards
+        #     of that color and rank that can be played to would be less than
+        #     equal to the number of currently playable opposite color and -1
+        #     rank cards in stock or tableau or foundation.
+        #   - OR the move reveals a non-hidden card which:
+        #     - Itself is playable to foundation
+        #     - OR is playable to another stack
+        #       - AND the revealed card is not a king on an empty.
+        # - AND For all accessible cards from stock, it is not true that:
+        #   - it is playable to tableau or foundation
+            
     @property
     def hand(self) -> Deck:
         # return the currently viewed card(s) from the waste pile. Only the top
