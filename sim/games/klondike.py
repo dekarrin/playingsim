@@ -346,7 +346,7 @@ class State:
         # we need to also
         # simulate flipping the waste pile and checking cards accessible that
         # way.
-        if len(self.waste) > self.draw_count and self.remaining_stock_flips > 0:
+        if len(self.waste) >= self.draw_count and self.remaining_stock_flips > 0:
             original_top = len(self.waste) - 1
             next_waste = self.waste.clone()
 
@@ -777,6 +777,8 @@ class Game(BaseGame):
         win_condition_met = all(f.needs() is None for f in self.foundations.values())
         if win_condition_met:
             return False
+
+        return True
         
         # we can't determine if the game is unwinnable without looking ahead at
         # stock, which will only be player knowledge if they've been through it

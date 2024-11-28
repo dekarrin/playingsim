@@ -2,6 +2,34 @@ from enum import IntEnum, auto
 
 # Enums implement IntEnum to allow for ordering.
 
+class CustomSuit:
+    """
+    CustomSuit is a non-standard suit that implements the same methods as Suit,
+    allowing it to be used anywhere Suit is expected.
+    """
+
+    def __init__(self, name: str, short: str | None=None, value: int | None=0, is_red: bool | None=False):
+        self.name = name
+        self._short = short if short is not None else name[0].upper()
+        self._value = value if value is not None else 0
+        self._is_red = is_red is not None and is_red
+
+    @property
+    def value(self) -> int:
+        return self._value
+
+    def short(self) -> str:
+        return self._short
+    
+    def black(self) -> bool:
+        return not self._is_red
+    
+    def red(self) -> bool:
+        return self._is_red
+    
+    def color(self) -> str:
+        return "red" if self.red() else "black"
+
 
 class Suit(IntEnum):
     """
@@ -30,7 +58,7 @@ class Suit(IntEnum):
         return "black" if self.black() else "red"
     
     @classmethod
-    def parse(cls, s: str) -> 'Suit':
+    def parse(cls, s: str, allow_custom: bool=False, short: str | None=None, value: int | None=None, is_red: bool | None=None) -> 'Suit' | 'CustomSuit':
         if s.upper() == 'C' or s.upper() == 'CLUBS':
             return cls.CLUBS
         elif s.upper() == 'D' or s.upper() == 'DIAMONDS':
@@ -39,9 +67,29 @@ class Suit(IntEnum):
             return cls.HEARTS
         elif s.upper() == 'S' or s.upper() == 'SPADES':
             return cls.SPADES
+        elif allow_custom or short is not None or value is not None or is_red is not None:
+            return CustomSuit(s, short, value, is_red)
         else:
             raise ValueError(f"Invalid suit: {s}")
     
+
+class CustomRank:
+    """
+    CustomRank is a non-standard rank that implements the same methods as Rank,
+    allowing it to be used anywhere Rank is expected.
+    """
+
+    def __init__(self, name: str, short: str | None=None, value: int | None=None):
+        self.name = name
+        self._short = short if short is not None else name[0].upper()
+        self._value = value if value is not None else 0
+
+    def short(self) -> str:
+        return self._short
+    
+    @property
+    def value(self) -> int:
+        return self._value
 
 class Rank(IntEnum):
     """
@@ -78,7 +126,7 @@ class Rank(IntEnum):
             return self.name[0].upper()
         
     @classmethod
-    def parse(cls, s: str) -> 'Rank':
+    def parse(cls, s: str, allow_custom: bool=False, short: str | None=None, value: int | None=None) -> 'Rank' | 'CustomRank':
         if s.upper() in ['A', 'ACE', 'ONE', '1']:
             return cls.ACE
         elif s.upper() == '2' or s.upper() == 'TWO':
@@ -105,6 +153,8 @@ class Rank(IntEnum):
             return cls.QUEEN
         elif s.upper() == 'K' or s.upper() == 'KING':
             return cls.KING
+        elif allow_custom or short is not None or value is not None:
+            return CustomRank(s, short, value)
         else:
             raise ValueError(f"Invalid rank: {s}")
 
@@ -115,9 +165,16 @@ class Card:
     hearts, or spades, and rank of Ace through King.
     """
 
-    def __init__(self, suit: Suit, rank: Rank):
-        self.suit = suit
-        self.rank = rank
+    def __init__(self, suit: Suit | any, rank: Rank | any):
+        if isinstance(suit, Suit):
+            self.suit = suit
+        else:
+            self.suit = CustomSuit(str(suit))
+
+        if isinstance(rank, Rank):
+            self.rank = rank
+        else:
+            self.rank = CustomRank(str(rank))
 
     def __str__(self) -> str:
         return f"{self.rank.short()}{self.suit.short()}"
