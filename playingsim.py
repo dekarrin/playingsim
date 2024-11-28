@@ -25,7 +25,7 @@ def play_klondike(draw_count: int=1, stock_pass_limit: int=0, deck_seed: str | N
 def main():
     parser = argparse.ArgumentParser(description='Play game sims')
 
-    subs = parser.add_subparsers(dest='game', help='Game to play', default='klondike', required=False, metavar='GAME')
+    subs = parser.add_subparsers(dest='game', help='Game to play', required=True, metavar='GAME')
     subs: argparse._SubParsersAction
 
     klon_parser = subs.add_parser('klondike', help='Play Klondike solitaire')
@@ -34,7 +34,6 @@ def main():
     klon_parser.add_argument('-p', '--piles', type=int, default=7, help='Set number of tableau piles to use. Typical value is 7 for a 1-deck game.')
     klon_parser.add_argument('-l', '--limit', type=int, default=0, help='Set the number of times the stock pile can be cycled. Default is 0, which is unlimited.')
     klon_parser.add_argument('-s', '--seed', type=str, default=None, help='Set the seed for the random number generator. This allows for reproducible games.')
-    parser.set_defaults(game='klondike')
     args = parser.parse_args()
 
     if args.game.lower() == 'klondike':
