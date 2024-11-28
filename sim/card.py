@@ -1,4 +1,5 @@
 from enum import IntEnum, auto
+from typing import Any
 
 # Enums implement IntEnum to allow for ordering.
 
@@ -58,7 +59,7 @@ class Suit(IntEnum):
         return "black" if self.black() else "red"
     
     @classmethod
-    def parse(cls, s: str, allow_custom: bool=False, short: str | None=None, value: int | None=None, is_red: bool | None=None) -> 'Suit' | 'CustomSuit':
+    def parse(cls, s: str, allow_custom: bool=False, short: str | None=None, value: int | None=None, is_red: bool | None=None) -> 'Suit | CustomSuit':
         if s.upper() == 'C' or s.upper() == 'CLUBS':
             return cls.CLUBS
         elif s.upper() == 'D' or s.upper() == 'DIAMONDS':
@@ -126,7 +127,7 @@ class Rank(IntEnum):
             return self.name[0].upper()
         
     @classmethod
-    def parse(cls, s: str, allow_custom: bool=False, short: str | None=None, value: int | None=None) -> 'Rank' | 'CustomRank':
+    def parse(cls, s: str, allow_custom: bool=False, short: str | None=None, value: int | None=None) -> 'Rank | CustomRank':
         if s.upper() in ['A', 'ACE', 'ONE', '1']:
             return cls.ACE
         elif s.upper() == '2' or s.upper() == 'TWO':
@@ -165,7 +166,7 @@ class Card:
     hearts, or spades, and rank of Ace through King.
     """
 
-    def __init__(self, suit: Suit | any, rank: Rank | any):
+    def __init__(self, suit: Suit | Any, rank: Rank | Any):
         if isinstance(suit, Suit):
             self.suit = suit
         else:

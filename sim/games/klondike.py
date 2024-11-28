@@ -346,7 +346,12 @@ class State:
         # we need to also
         # simulate flipping the waste pile and checking cards accessible that
         # way.
-        if len(self.waste) >= self.draw_count and self.remaining_stock_flips > 0:
+        print("HERE TOO")
+        print("LW:", len(self.waste))
+        print("DC:", self.draw_count)
+        print("SF:", self.remaining_stock_flips)
+        if len(self.waste) >= self.draw_count and (self.pass_limit < 1 or self.remaining_stock_flips > 0):
+            print("CHECKING WASTE")
             original_top = len(self.waste) - 1
             next_waste = self.waste.clone()
 
@@ -363,12 +368,13 @@ class State:
                     c = stock_copy.draw()
                     next_waste.insert(0, c)
 
-            flipped_stock = next_waste.flip()
-            for i in range(0, len(flipped_stock), self.draw_count):
+            next_waste.flip()
+            next_stock = next_waste
+            for i in range(0, len(next_stock), self.draw_count):
                 if i == original_top:
                     # don't include the top card twice
                     continue
-                accessibles.append(flipped_stock[i])
+                accessibles.append(next_stock[i])
             
             # already did last-card check, don't need to do so again.
 
@@ -889,7 +895,7 @@ class HumanPlayer(BasePlayer):
         self.rules = rules
 
     def next_move(self, s: State) -> Action:
-        cio.clear()
+        #cio.clear()
         print(s.board())
 
         moves = [(m, str(m)) for m in s.legal_moves()]
