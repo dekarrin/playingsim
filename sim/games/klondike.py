@@ -772,15 +772,15 @@ class Game(BaseGame):
         win_condition_met = all(f.needs() is None for f in self.foundations.values())
         if win_condition_met:
             return False
-
-        return True
         
         # we can't determine if the game is unwinnable without looking ahead at
         # stock, which will only be player knowledge if they've been through it
         # at least once. Ergo, no-useful-move detection can only be done if the
         # pass limit is > 1 and the stock has been gone through at least once.
         
-        # elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit > 1):
+        elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit != 1):
+            pass
+    
         #     st = self.state
         #     moves = st.legal_moves()
         #
@@ -833,6 +833,8 @@ class Game(BaseGame):
         #       - AND the revealed card is not a king on an empty.
         # - AND For all accessible cards from stock, it is not true that:
         #   - it is playable to tableau or foundation
+
+        return True
             
     @property
     def hand(self) -> Deck:
