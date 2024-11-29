@@ -325,30 +325,13 @@ class State:
         least once.
         """
 
-        # Simulated test case:
-        # DRAW 3
-        #
-        # T:[12356], ST:[789]
-        # IRL this would go:
-        #
-        # T:[98712356], ST:[]
-        # T:[], ST:[65321789]
-        # T:[356], ST:[21789]
-        # T:[712356], ST:[89]
-        # T:[98712356], ST:[]
-        #
-        # So Accessibles would be:
-        # [1937]
-
         accessibles = list()
 
         # Include the card currently in the waste pile, if there is one:
         if len(self.waste) > 0:
             accessibles.append(self.waste.top)
 
-        # accessibles = [1]
-
-        if len(self.stock) > 0 and self.current_stock_pass > 1:  # true
+        if len(self.stock) > 0 and self.current_stock_pass > 1:
             # Include every nth card remaining in stock, where n is the draw_count:
             for i in range(0, len(self.stock), self.draw_count):
                 idx = i + self.draw_count - 1
@@ -356,25 +339,21 @@ class State:
                     idx = len(self.stock) - 1
                 accessibles.append(self.stock[idx])
 
-            # accessibles = [19]
-
         # if there are waste-pile cards under the top one that could be revealed
         # with a flip (DEFINED AS len(waste) > draw_count),
         # we need to also
         # simulate flipping the waste pile and checking cards accessible that
         # way.
-
-        # T:[12356], ST:[789]
         if len(self.waste) >= self.draw_count and (self.pass_limit < 1 or self.remaining_stock_flips > 0):
-            original_top = len(self.waste) - 1  # 4
-            next_waste = self.waste.clone()     # [12356]
+            original_top = len(self.waste) - 1
+            next_waste = self.waste.clone()
 
-            shifted_waste = len(self.waste) % self.draw_count != 0  # 5 % 3 != 0, True
-            if shifted_waste and self.current_stock_pass > 1 and len(self.stock) > 0:  # True
+            shifted_waste = len(self.waste) % self.draw_count != 0
+            if shifted_waste and self.current_stock_pass > 1 and len(self.stock) > 0:
                 # we have seen the remainder of stock and the flip would shift
                 # things so add all cards that would become accessible on next
                 # flip, including rest of stock.
-                stock_copy = self.stock.clone()  # [789]
+                stock_copy = self.stock.clone()
         
                 for _ in range(self.draw_count):
                     if len(stock_copy) == 0:
@@ -382,11 +361,8 @@ class State:
                     c = stock_copy.draw()
                     next_waste.insert(0, c)
 
-                # next_waste = [98712356]
-
             next_waste.flip()
-            next_stock = next_waste  # [65321789A]  l-dc = 8-3 = 6
-                                     #     
+            next_stock = next_waste
             # only go up to draw count - 1 because we don't want to include the
             # bottom stock card twice.
             for i in range(0, len(next_stock)-self.draw_count, self.draw_count):
@@ -395,7 +371,6 @@ class State:
                     # don't include the top card twice
                     continue
                 accessibles.append(next_stock[idx])
-                # accessibles = [1937]
             
             # already did last-card check, don't need to do so again.
 
