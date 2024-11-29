@@ -16,7 +16,7 @@ def play_klondike(draw_count: int=1, stock_pass_limit: int=0, deck_seed: str | N
         deck = Deck()
         deck.shuffle()
 
-    g = klondike.Game(draw_count, stock_pass_limit, deck_seed, num_piles)
+    g = klondike.Game(draw_count, stock_pass_limit, deck, num_piles)
     p = klondike.HumanPlayer(g.rules)
 
     sim.runner.play_until_done(g, [p])

@@ -180,6 +180,9 @@ class Card:
     def __str__(self) -> str:
         return f"{self.rank.short()}{self.suit.short()}"
     
+    def __repr__(self) -> str:
+        return f"<{self.rank} of {self.suit}>"
+    
     def __eq__(self, other) -> bool:
         if not isinstance(other, Card):
             return False

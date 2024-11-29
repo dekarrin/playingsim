@@ -325,42 +325,56 @@ class State:
         least once.
         """
 
+        # Simulated test case:
+        # DRAW 3
+        #
+        # T:[12356], ST:[789]
+        # IRL this would go:
+        #
+        # T:[98712356], ST:[]
+        # T:[], ST:[65321789]
+        # T:[356], ST:[21789]
+        # T:[712356], ST:[89]
+        # T:[98712356], ST:[]
+        #
+        # So Accessibles would be:
+        # [1937]
+
         accessibles = list()
 
         # Include the card currently in the waste pile, if there is one:
         if len(self.waste) > 0:
             accessibles.append(self.waste.top)
 
-        if len(self.stock) > 0 and self.current_stock_pass > 1:
+        # accessibles = [1]
+
+        if len(self.stock) > 0 and self.current_stock_pass > 1:  # true
             # Include every nth card remaining in stock, where n is the draw_count:
             for i in range(0, len(self.stock), self.draw_count):
-                accessibles.append(self.stock[i])
+                idx = i + self.draw_count - 1
+                if idx >= len(self.stock):
+                    idx = len(self.stock) - 1
+                accessibles.append(self.stock[idx])
 
-            # if remaining stock cards is not divisible by draw_count, the last card
-            # needs to be added as well:
-            if len(self.stock) % self.draw_count != 0:
-                accessibles.append(self.stock[-1])
+            # accessibles = [19]
 
         # if there are waste-pile cards under the top one that could be revealed
         # with a flip (DEFINED AS len(waste) > draw_count),
         # we need to also
         # simulate flipping the waste pile and checking cards accessible that
         # way.
-        print("HERE TOO")
-        print("LW:", len(self.waste))
-        print("DC:", self.draw_count)
-        print("SF:", self.remaining_stock_flips)
-        if len(self.waste) >= self.draw_count and (self.pass_limit < 1 or self.remaining_stock_flips > 0):
-            print("CHECKING WASTE")
-            original_top = len(self.waste) - 1
-            next_waste = self.waste.clone()
 
-            shifted_waste = len(self.waste) % self.draw_count != 0
-            if shifted_waste and self.current_stock_pass > 1 and len(self.stock) > 0:
+        # T:[12356], ST:[789]
+        if len(self.waste) >= self.draw_count and (self.pass_limit < 1 or self.remaining_stock_flips > 0):
+            original_top = len(self.waste) - 1  # 4
+            next_waste = self.waste.clone()     # [12356]
+
+            shifted_waste = len(self.waste) % self.draw_count != 0  # 5 % 3 != 0, True
+            if shifted_waste and self.current_stock_pass > 1 and len(self.stock) > 0:  # True
                 # we have seen the remainder of stock and the flip would shift
                 # things so add all cards that would become accessible on next
                 # flip, including rest of stock.
-                stock_copy = self.stock.clone()
+                stock_copy = self.stock.clone()  # [789]
         
                 for _ in range(self.draw_count):
                     if len(stock_copy) == 0:
@@ -368,13 +382,20 @@ class State:
                     c = stock_copy.draw()
                     next_waste.insert(0, c)
 
+                # next_waste = [98712356]
+
             next_waste.flip()
-            next_stock = next_waste
-            for i in range(0, len(next_stock), self.draw_count):
-                if i == original_top:
+            next_stock = next_waste  # [65321789A]  l-dc = 8-3 = 6
+                                     #     
+            # only go up to draw count - 1 because we don't want to include the
+            # bottom stock card twice.
+            for i in range(0, len(next_stock)-self.draw_count, self.draw_count):
+                idx = i + self.draw_count - 1
+                if idx == original_top:
                     # don't include the top card twice
                     continue
-                accessibles.append(next_stock[i])
+                accessibles.append(next_stock[idx])
+                # accessibles = [1937]
             
             # already did last-card check, don't need to do so again.
 
