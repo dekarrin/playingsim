@@ -468,15 +468,6 @@ class State:
                 board += border
         board += '\n'
 
-        # print out accessibles for testing purposes
-        board += '\nACCESSIBLES:\n['
-        acc_str = ''
-        for c in self.accessible_stock_cards:
-            acc_str += ',' + str(c)
-        if len(acc_str) > 0:
-            acc_str = acc_str[1:]
-        board += acc_str + ']\n'
-
         return board
 
     def legal_moves(self) -> list[Action]:
