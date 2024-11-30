@@ -781,58 +781,84 @@ class Game(BaseGame):
         elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit != 1):
             pass
     
-        #     st = self.state
-        #     moves = st.legal_moves()
-        #
-        #     if len(moves) == 0:
-        #         return False
+            st = self.state
+            moves = st.legal_moves()
+        
+            if len(moves) == 0:
+                return False
+            
+            # definition of no useful moves remaining using only knowledge that
+            # player would have, generalized to multiple decks. NOT generalized
+            # to 1-pass limit over stock; this relies on knowledge of stock,
+            # which would be impossible to gain as it depends on having been
+            # through it at least once.
 
-        #
-        # definition of no useful moves remaining using only knowledge that
-        # player would have, generalized to multiple decks. NOT generalized to 1-pass limit over
-        # stock.
-        #
-        # - The stock has been through at least once
-        # - AND For all moves from a foundation, it is not true that:
-        #   - The move is to a tableau pile
-        #   - AND
-        #     - The card to be moved changes state such that the number of
-        #       playable-to cards of that card's color and rank would be less
-        #       than or equal to the number of currently playable opposite color
-        #       and -1 rank cards in stock or tableau or foundation.
-        #     - OR the move reveals a card which:
-        #       - Itself is playable to tableau
-        # - AND For all full-stack moves from tableau, it is not true that
-        #   - the move reveals a hidden card
-        #   - OR the move reveals a blank space such that the total number of
-        #     blank spaces would be less than/equal to the number of currently
-        #     playable kings in stock or tableau or foundation, AND the top of
-        #     stack is not a king.
-        # - AND For all non-full-stack moves from tableau, it is not true that:
-        #   - the move reveals a non-hidden card such that the total number of that
-        #     particular rank and color of card that can be played to would be
-        #     less than/equal to the number of currently playable opposite color
-        #     and -1 rank cards in stock or tableau or foundation, excluding the
-        #     top of the moved stack.
-        #   - OR the move reveals a non-hidden card which:
-        #     - Itself is playable to foundation
-        #     - OR is playable to another stack
-        #       - AND the revealed card is not a king on an empty.
-        # - AND For all moves to foundation from tableau, it is not true that:
-        #   - the move changes game state such that the number of playable-to
-        #     foundation piles of that card's exact rank and suit would be less
-        #     than/equal to the number of currently playable cards of the same
-        #     suit with rank +1 in stock or tableau or foundation.
-        #   - OR the move reveals a non-hidden card such that the total number of cards
-        #     of that color and rank that can be played to would be less than
-        #     equal to the number of currently playable opposite color and -1
-        #     rank cards in stock or tableau or foundation.
-        #   - OR the move reveals a non-hidden card which:
-        #     - Itself is playable to foundation
-        #     - OR is playable to another stack
-        #       - AND the revealed card is not a king on an empty.
-        # - AND For all accessible cards from stock, it is not true that:
-        #   - it is playable to tableau or foundation
+            single_card_moves: list[MoveOneAction] = [m for m in moves if m.type == TurnType.MOVE_ONE]
+            stack_moves: list[MoveTableauStackAction] = [m for m in moves if m.type == TurnType.MOVE_TABLEAU_STACK]
+
+            from_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.FOUNDATION]
+            tableau_to_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.TABLEAU and m.dest.type == LocationType.FOUNDATION]
+            split_stack_moves = [m for m in stack_moves if m.splits_stack(st)]
+            full_stack_moves = [m for m in stack_moves if not m.splits_stack(st)]
+
+            has_useful_moves = False
+
+            # - For all moves from a foundation, it is not true that:
+            #   - The move is to a tableau pile
+            #   - AND
+            #     - The card to be moved changes state such that the number of
+            #       playable-to cards of that card's color and rank would be less
+            #       than or equal to the number of currently playable opposite color
+            #       and -1 rank cards in stock or tableau or foundation.
+            #     - OR the move reveals a card which:
+            #       - Itself is playable to tableau
+            for m in from_foundation_moves:
+                if m.dest.type == LocationType.TABLEAU:
+                    has_useful_moves = True
+                    break
+                else:
+                    # it's to another foundation. check if it would reveal a
+                    # card playable to the tableau or if it would meaningfully
+                    # increase the number of playable-to cards
+
+
+                    after_play_state = self.state_with_turn_applied(m)
+
+            if has_useful_moves:
+                return True
+            
+
+            # - AND For all full-stack moves from tableau, it is not true that
+            #   - the move reveals a hidden card
+            #   - OR the move reveals a blank space such that the total number of
+            #     blank spaces would be less than/equal to the number of currently
+            #     playable kings in stock or tableau or foundation, AND the top of
+            #     stack is not a king.
+            # - AND For all non-full-stack moves from tableau, it is not true that:
+            #   - the move reveals a non-hidden card such that the total number of that
+            #     particular rank and color of card that can be played to would be
+            #     less than/equal to the number of currently playable opposite color
+            #     and -1 rank cards in stock or tableau or foundation, excluding the
+            #     top of the moved stack.
+            #   - OR the move reveals a non-hidden card which:
+            #     - Itself is playable to foundation
+            #     - OR is playable to another stack
+            #       - AND the revealed card is not a king on an empty.
+            # - AND For all moves to foundation from tableau, it is not true that:
+            #   - the move changes game state such that the number of playable-to
+            #     foundation piles of that card's exact rank and suit would be less
+            #     than/equal to the number of currently playable cards of the same
+            #     suit with rank +1 in stock or tableau or foundation.
+            #   - OR the move reveals a non-hidden card such that the total number of cards
+            #     of that color and rank that can be played to would be less than
+            #     equal to the number of currently playable opposite color and -1
+            #     rank cards in stock or tableau or foundation.
+            #   - OR the move reveals a non-hidden card which:
+            #     - Itself is playable to foundation
+            #     - OR is playable to another stack
+            #       - AND the revealed card is not a king on an empty.
+            # - AND For all accessible cards from stock, it is not true that:
+            #   - it is playable to tableau or foundation
 
         return True
             
@@ -865,6 +891,16 @@ class Game(BaseGame):
             pass_limit=self.stock_pass_limit,
             draw_count=self.draw_count
         )
+
+    def state_with_turn_applied(self, action: Action):
+        """
+        Get the state that would result from playing the given move, without
+        changing self.
+        """
+        self.take_turn(self.current_player, action)
+        s = self.state
+        self.undo()
+        return s
     
     @property
     def max_players(self) -> int:
