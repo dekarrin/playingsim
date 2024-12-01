@@ -5,6 +5,8 @@ from .. import cio, UndoAction
 
 from enum import Enum, IntEnum, auto
 
+from typing import Callable
+
 
 class Foundation:
     """
@@ -42,6 +44,7 @@ class Foundation:
         del self.cards[0]
         return c
     
+    # TODO: make top be a property or make Deck.top be a method. Same for Pile.
     def top(self) -> Card | None:
         if len(self.cards) == 0:
             return None
@@ -376,6 +379,43 @@ class State:
 
         return accessibles
     
+    def foundation_from_location(self, loc: FoundationPosition) -> Foundation:
+        """
+        Not yet generalized for multiple locations, may be updated in future.
+        """
+        if loc.type != LocationType.FOUNDATION:
+            raise ValueError("Location must be a foundation")
+        
+        if loc.suit not in self.foundations:
+            raise ValueError("No foundation pile for suit {!s}".format(loc.suit))
+        
+        return self.foundations[loc.suit].clone()
+    
+    def tableau_from_location(self, loc: TableauPosition) -> Pile:
+        if loc.type != LocationType.TABLEAU:
+            raise ValueError("Location must be a tableau pile")
+        
+        if loc.pile < 0 or loc.pile >= len(self.tableau):
+            raise ValueError("No tableau pile at index {:d}".format(loc.pile))
+        
+        return self.tableau[loc.pile].clone()
+        
+    def play_area_from_location(self, loc: Location) -> Pile | Foundation | tuple[Deck, Deck]:
+        """
+        Returns the play area corresponding to the given location. Depending on
+        loc's type, this will either be a tableau Pile, a Foundation, or a tuple
+        containing the current waste and stock pile in that order.
+        """
+        if loc.type == LocationType.TABLEAU:
+            return self.tableau_from_location(loc)
+        elif loc.type == LocationType.FOUNDATION:
+            return self.foundation_from_location(loc)
+        elif loc.type == LocationType.WASTE:
+            return (self.waste, self.stock)
+        else:
+            raise ValueError("Invalid location type")
+
+    
     def clone(self) -> 'State':
         return State(
             tableau=[t.clone() for t in self.tableau],
@@ -385,6 +425,77 @@ class State:
             current_stock_pass=self.current_stock_pass,
             pass_limit=self.pass_limit
         )
+    
+    def playable_destinations(self, c: Card) -> list[Location]:
+        """
+        Return a list of all locations where the given card could be legally
+        played to in this state.
+        """
+        locs = list()
+        
+        # foundation piles
+        for s, f in self.foundations.items():
+            if c == f.needs():
+                locs.append(FoundationPosition(s))
+        
+        # tableau piles
+        for i, t in enumerate(self.tableau):
+            if c in t.needs():
+                locs.append(TableauPosition(i))
+        
+        return locs
+    
+    def top_of(self, loc: Location) -> Card | None:
+        """
+        Return the top card at the given location, or None if there is no card
+        there.
+        """
+        if loc.type == LocationType.TABLEAU:
+            t = self.tableau_from_location(loc)
+            return t.top()
+        elif loc.type == LocationType.FOUNDATION:
+            f = self.foundation_from_location(loc)
+            return f.top()
+        elif loc.type == LocationType.WASTE:
+            return self.waste.top
+        else:
+            raise ValueError("Invalid location type")
+    
+    def find_playable_singles(self, cond: Callable[[Card], bool], in_foundations: bool=True, in_tableau: bool=True, in_waste: bool=True) -> list[Location]:
+        """
+        Return the locations of all cards that are currently playable as a
+        single card (i.e. excluding the backs of multi-card stacks) that match
+        the given condition.
+
+        Note that if in_waste is enabled, it will check only the top card in
+        the waste pile, and will not consider any further ones.
+        """
+        locs = list()
+
+        # build list of all possible locations then filter by condition
+
+        # foundation piles
+        if in_foundations:
+            for s, _ in self.foundations.items():
+                locs.append(FoundationPosition(s))
+
+        # tableau piles
+        if in_tableau:
+            for i in range(len(self.tableau)):
+                locs.append(TableauPosition(i))
+
+        # waste pile
+        if in_waste:
+            locs.append(WastePosition())
+
+        # filter it by cond
+        matches = list()
+        for loc in locs:
+            c = self.top_of(loc)
+            if c is not None and cond(c):
+                matches.append(loc)
+
+        return locs
     
     def board(self, reveal_hidden=False) -> str:
         """
@@ -805,24 +916,41 @@ class Game(BaseGame):
 
             # - For all moves from a foundation, it is not true that:
             #   - The move is to a tableau pile
-            #   - AND
-            #     - The card to be moved changes state such that the number of
-            #       playable-to cards of that card's color and rank would be less
-            #       than or equal to the number of currently playable opposite color
-            #       and -1 rank cards in stock or tableau or foundation.
-            #     - OR the move reveals a card which:
-            #       - Itself is playable to tableau
+            #   - AND the card being moved is not an Ace, as pulling an ace from
+            #     a foundation is never useful.
+            #   - AND:
+            #     - The move would reveal a card which is playable to tableau.
+            #     - OR after the card is moved, the number of playable-to cards
+            #       of that card's color and rank is less than or equal to the
+            #       number of then-playable opposite color and -1 rank cards in
+            #       stock or tableau or foundation.
             for m in from_foundation_moves:
-                if m.dest.type == LocationType.TABLEAU:
-                    has_useful_moves = True
-                    break
-                else:
-                    # it's to another foundation. check if it would reveal a
-                    # card playable to the tableau or if it would meaningfully
-                    # increase the number of playable-to cards
 
+                # Check that the move is to a tableau pile and the card is not
+                # an Ace.
 
-                    after_play_state = self.state_with_turn_applied(m)
+                moved_card = st.foundation_from_location(m.source).top()
+
+                if m.dest.type == LocationType.TABLEAU and moved_card.rank != Rank.ACE:
+                    st_after_move = self.state_with_turn_applied(m)
+
+                    # did it reveal another card playable to tableau from same
+                    # foundation?
+                    pos: FoundationPosition = m.source
+                    revealed_card = st_after_move.foundation_from_location(pos).top()
+                    revealed_playable_to = st_after_move.playable_destinations(revealed_card)
+                    if any(l.type == LocationType.TABLEAU for l in revealed_playable_to):
+                        has_useful_moves = True
+                        break
+
+                    # otherwise, would the move meaningfully increase the number
+                    # of playable-to cards of that rank and color?
+                    opposite_sample = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                    playable_to_count = len(st_after_move.playable_destinations(opposite_sample))
+
+                    # TODO AFTER TINYO: make find_playable_singles accept kwargs conds for color, rank, suit, this is overkill.
+                    st_after_move.find_playable_singles(lambda c: c.color() == opposite_sample.color() and c.rank == opposite_sample.rank)
+
 
             if has_useful_moves:
                 return True
