@@ -461,15 +461,64 @@ class State:
         else:
             raise ValueError("Invalid location type")
     
-    def find_playable_singles(self, cond: Callable[[Card], bool], in_foundations: bool=True, in_tableau: bool=True, in_waste: bool=True) -> list[Location]:
+    def find_playable_singles(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None, in_foundations: bool=True, in_tableau: bool=True, in_waste: bool=True) -> list[Location]:
         """
         Return the locations of all cards that are currently playable as a
         single card (i.e. excluding the backs of multi-card stacks) that match
-        the given condition.
+        the given conditions (color, suit, and/or rank). If no conditions are
+        given, all playable single card locations are returned.
 
         Note that if in_waste is enabled, it will check only the top card in
         the waste pile, and will not consider any further ones.
         """
+        no_filters = color is None and suit is None and rank is None
+
+        if color is not None:
+            if isinstance(color, str):
+                if color.lower() == "black":
+                    color = "black"
+                elif color.lower() == "red":
+                    color = "red"
+                else:
+                    raise ValueError("Invalid color string")
+            elif isinstance(color, Card):
+                color = color.color()
+            elif isinstance(color, Suit):
+                color = color.color()
+            else:
+                raise ValueError("Invalid color value, must be Card, str, or Suit")
+            
+        if suit is not None:
+            if isinstance(suit, str):
+                suit = Suit.parse(suit)
+            elif isinstance(suit, Card):
+                suit = suit.suit
+            elif not isinstance(suit, Suit):
+                raise ValueError("Invalid suit value, must be Card, str, or Suit")
+            
+        if rank is not None:
+            if isinstance(rank, str):
+                rank = Rank.parse(rank)
+            elif isinstance(rank, int):
+                # this is fine, actually, we can directly compare
+                pass
+            elif isinstance(rank, Card):
+                rank = rank.rank
+            elif not isinstance(rank, Rank):
+                raise ValueError("Invalid rank value, must be Card, str, int, or Rank")
+
+        def cond(c: Card) -> bool:
+            if no_filters:
+                return True
+            else:
+                if color is not None and c.color() != color:
+                    return False
+                if suit is not None and c.suit != suit:
+                    return False
+                if rank is not None and c.rank != rank:
+                    return False
+                return True
+
         locs = list()
 
         # build list of all possible locations then filter by condition
@@ -945,12 +994,13 @@ class Game(BaseGame):
 
                     # otherwise, would the move meaningfully increase the number
                     # of playable-to cards of that rank and color?
-                    opposite_sample = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                    playable_to_count = len(st_after_move.playable_destinations(opposite_sample))
-
-                    # TODO AFTER TINYO: make find_playable_singles accept kwargs conds for color, rank, suit, this is overkill.
-                    st_after_move.find_playable_singles(lambda c: c.color() == opposite_sample.color() and c.rank == opposite_sample.rank)
-
+                    opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                    playable_to_count = len(st_after_move.playable_destinations(opp))
+                    playable_count = len(st_after_move.find_playable_singles(color=opp.color(), rank=opp.rank, in_waste=False))
+                    playable_count += len(c for c in st_after_move.accessible_stock_cards if c.color() == opp.color() and c.rank == opp.rank)
+                    if playable_to_count <= playable_count:
+                        has_useful_moves = True
+                        break
 
             if has_useful_moves:
                 return True
