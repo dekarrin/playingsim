@@ -62,7 +62,7 @@ class Foundation:
 class Pile:
     """A tableau pile of cards in Klondike Solitaire"""
 
-    def __init__(self, cards: list[Card]):
+    def __init__(self, cards: list[Card] | None=None):
         """
         Create a new pile that contains the given cards, with the last card at
         the bottom of the pile and the first card at the top. The first card
@@ -70,6 +70,9 @@ class Pile:
         of the pile; the rest remain unrevealed and not known to the player
         unless Thoughtful Klondike rules are in effect.
         """
+        if cards is None:
+            cards = []
+        
         cards = list(cards)
 
         self.shown: list[Card] = []
@@ -89,14 +92,18 @@ class Pile:
     def take(self, count: int) -> list[Card]:
         """
         Remove the top count cards from the pile's shown cards and return them.
-        If there are fewer than count cards in the pile, raises a ValueError.
+        If there are fewer than count cards in the pile's shown cards, raises a
+        ValueError. Count must be at least 1.
         """
+        if count < 1:
+            raise ValueError("Count must be at least 1")
         if count > len(self.shown):
             raise ValueError("Cannot take {:d} cards; only {:d} cards are revealed".format(count, len(self.shown)))
         cards = self.shown[:count]
         self.shown = self.shown[count:]
         if len(self.shown) == 0 and len(self.hidden) > 0:
-            self.shown = [self.hidden.pop()]
+            self.shown = [self.hidden[0]]
+            del self.hidden[0]
         return cards
 
     def needs(self) -> list[Card]:
@@ -151,7 +158,8 @@ class Pile:
             if len(self.hidden) > 0:
                 # not a valid state, somebody forgot to turn over the top hidden
                 # card. This is fixable.
-                self.shown = [self.hidden.pop()]
+                self.shown = [self.hidden[0]]
+                del self.hidden[0]
                 return self.shown[0]
 
             return None
@@ -1005,6 +1013,52 @@ class Game(BaseGame):
             if has_useful_moves:
                 return True
             
+            # - AND For all moves to foundation from tableau, it is not true that:
+            #   - the move reveals a hidden card
+            #   - OR the move reveals a non-hidden card such that:
+            #     - revealed card is itself is playable to foundation
+            #     - OR reaveled card is playable to another stack
+            #       - AND the revealed card is not a king on an empty.
+            #     - OR game state is changed such that the total number of cards
+            #       of revealed card's color and rank that can be played to
+            #       would be less than equal to the number of currently playable
+            #       opposite color and -1 rank cards in stock or tableau or
+            #       foundation.
+            #   - OR the move changes game state such that the number of playable-to
+            #     foundation piles of that card's exact rank and suit would be less
+            #     than/equal to the number of currently playable cards of the same
+            #     suit with rank +1 in stock or tableau. For simplicity,
+            #     we assume that a move from foundation-foundation would itself always be
+            #     a useless move, as the overall game state wouldn't advance, so
+            #     we do not consider it.
+            for m in tableau_to_foundation_moves:
+                t = st.tableau_from_location(m.source)
+
+                # does it reveal a hidden card? it will if its the last
+                # non-hidden card from the tableau, and tableau has at least one
+                # hidden card. don't check for an empty-cell reveal; that is
+                # handled by another check.
+                if len(t.hidden) > 0 and len(t.shown) == 1:
+                    has_useful_moves = True
+                    break
+
+                # does it reveal a non-hidden card...
+                if len(t.shown) > 1:
+                    #  that is playable to foundation?
+                    reavealed_card = t.shown[-2]
+
+                # AI nonsense below this point.
+
+                # check if the move makes it so other cards could be played
+                moved_card = st.tableau_from_location(m.source).top()
+                f = st.foundation_from_location(m.dest)
+                playable_to_count = len(st.playable_destinations(moved_card))
+                playable_count = len(st.find_playable_singles(color=moved_card.color(), rank=moved_card.rank+1, in_waste=False))
+                playable_count += len(c for c in st.accessible_stock_cards if c.color() == moved_card.color() and c.rank == moved_card.rank+1)
+                if playable_to_count <= playable_count:
+                    has_useful_moves = True
+                    break
+            
 
             # - AND For all full-stack moves from tableau, it is not true that
             #   - the move reveals a hidden card
@@ -1018,19 +1072,6 @@ class Game(BaseGame):
             #     less than/equal to the number of currently playable opposite color
             #     and -1 rank cards in stock or tableau or foundation, excluding the
             #     top of the moved stack.
-            #   - OR the move reveals a non-hidden card which:
-            #     - Itself is playable to foundation
-            #     - OR is playable to another stack
-            #       - AND the revealed card is not a king on an empty.
-            # - AND For all moves to foundation from tableau, it is not true that:
-            #   - the move changes game state such that the number of playable-to
-            #     foundation piles of that card's exact rank and suit would be less
-            #     than/equal to the number of currently playable cards of the same
-            #     suit with rank +1 in stock or tableau or foundation.
-            #   - OR the move reveals a non-hidden card such that the total number of cards
-            #     of that color and rank that can be played to would be less than
-            #     equal to the number of currently playable opposite color and -1
-            #     rank cards in stock or tableau or foundation.
             #   - OR the move reveals a non-hidden card which:
             #     - Itself is playable to foundation
             #     - OR is playable to another stack
