@@ -31,7 +31,7 @@ class LocationList(list[Location]):
                 return True
         return False
     
-    def find(self, type: Location | str | LocationType | None=None) -> 'LocationList':
+    def where(self, type: Location | str | LocationType | None=None) -> 'LocationList':
         no_filters = type is None
             
         if type is not None:
@@ -62,7 +62,7 @@ class LocationList(list[Location]):
         return len(self)
     
 class CardList(list[Card]):
-    def find(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None) -> 'CardList':
+    def where(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None) -> 'CardList':
         no_filters = color is None and suit is None and rank is None
 
         if color is not None:
@@ -426,6 +426,15 @@ class State:
         self.current_stock_pass = current_stock_pass
         self.pass_limit = pass_limit
         self.draw_count = draw_count
+
+    def meaningfully_increases_dests_for(self, c: Card, where_dest_type: LocationType | Location | str | None=None) -> bool:
+        playable_dests = self.playable_destinations(c)
+        if where_dest_type is not None:
+            playable_dests = playable_dests.where(where_dest_type)
+        playable_to_count = playable_dests.len()
+        playable_count = self.find_playable_singles(color=c, rank=c, in_waste=False).len()
+        playable_count += self.accessible_stock_cards.where(color=c, rank=c).len()
+        return playable_to_count <= playable_count
 
     @property
     def remaining_stock_flips(self) -> int:
@@ -1106,10 +1115,7 @@ class Game(BaseGame):
                     # otherwise, would the move meaningfully increase the number
                     # of playable-to cards of that rank and color?
                     opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                    playable_to_count = st_after_move.playable_destinations(opp).len()
-                    playable_count = st_after_move.find_playable_singles(color=opp.color(), rank=opp.rank, in_waste=False).len()
-                    playable_count += st_after_move.accessible_stock_cards.find(color=opp.color(), rank=opp.rank).len()
-                    if playable_to_count <= playable_count:
+                    if st_after_move.meaningfully_increases_dests_for(opp):
                         has_useful_moves = True
                         break
 
@@ -1149,11 +1155,11 @@ class Game(BaseGame):
 
                 # does it reveal a non-hidden card...
                 if len(t.shown) > 1:
-                    reavealed_card = t.shown[1]
-                    playable_dests = st_after_move.playable_destinations(reavealed_card)
+                    revealed_card = t.shown[1]
+                    playable_dests = st_after_move.playable_destinations(revealed_card)
 
                     #  ...that is playable to foundation?
-                    if any(l.type == LocationType.FOUNDATION for l in playable_dests):
+                    if playable_dests.has_type(LocationType.FOUNDATION):
                         has_useful_moves = True
                         break
                     
@@ -1167,26 +1173,14 @@ class Game(BaseGame):
                     # TODO: modularize this? at least two are identical, there
                     # is one in block above
                     opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                    playable_to_count = st_after_move.playable_destinations(opp).len()
-                    playable_count = st_after_move.find_playable_singles(color=opp.color(), rank=opp.rank, in_waste=False).len()
-                    playable_count += st_after_move.accessible_stock_cards.find(color=opp.color(), rank=opp.rank).len()
-                    if playable_to_count <= playable_count:
+                    if st_after_move.meaningfully_increases_dests_for(opp):
                         has_useful_moves = True
                         break
 
                 # otherwise, would the move meaningfully increase the number of
-                # playable-to foundation piles of that card's rank and suit?
-
-
-                # AI nonsense below this point.
-
-                # check if the move makes it so other cards could be played
-                moved_card = st.tableau_from_location(m.source).top()
-                f = st.foundation_from_location(m.dest)
-                playable_to_count = len(st.playable_destinations(moved_card))
-                playable_count = len(st.find_playable_singles(color=moved_card.color(), rank=moved_card.rank+1, in_waste=False))
-                playable_count += len(c for c in st.accessible_stock_cards if c.color() == moved_card.color() and c.rank == moved_card.rank+1)
-                if playable_to_count <= playable_count:
+                # playable-to foundation piles of moved card's rank and suit?
+                next = Card(t.top().suit, t.top().rank + 1)
+                if st_after_move.meaningfully_increases_dests_for(next, where_dest_type=LocationType.FOUNDATION):
                     has_useful_moves = True
                     break
             
@@ -1242,13 +1236,13 @@ class Game(BaseGame):
             draw_count=self.draw_count
         )
 
-    def state_with_turn_applied(self, action: Action):
+    def state_with_turn_applied(self, action: Action) -> State:
         """
         Get the state that would result from playing the given move, without
         changing self.
         """
         self.take_turn(self.current_player, action)
-        s = self.state
+        s = self.state.clone()
         self.undo()
         return s
     
