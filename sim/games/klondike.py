@@ -1202,7 +1202,9 @@ class Game(BaseGame):
                 if st_after_move.meaningfully_increases_dests_for(next, where_dest_type=LocationType.FOUNDATION):
                     has_useful_moves = True
                     break
-            
+
+            if has_useful_moves:
+                return True
 
             # - AND For all full-stack moves from tableau, it is not true that
             #   - the move reveals a hidden card
@@ -1226,6 +1228,9 @@ class Game(BaseGame):
                     has_useful_moves = True
                     break
 
+            if has_useful_moves:
+                return True
+
             # - AND For all non-full-stack moves from tableau, it is not true that:
             #   - the move reveals a non-hidden card such that the total number of that
             #     particular rank and color of card that can be played to would be
@@ -1236,10 +1241,42 @@ class Game(BaseGame):
             #     - Itself is playable to foundation
             #     - OR is playable to another stack
             #       - AND the revealed card is not a king on an empty.
+            for m in split_stack_moves:
+                t = st.tableau_from_location(m.source)
+                st_after_move = self.state_with_turn_applied(m)
+                t_after_move = st_after_move.tableau_from_location(m.source)
+                revealed_card = t_after_move.top()
+
+                # does it reveal a card that would increase playable-to slots?
+                opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                if st_after_move.meaningfully_increases_dests_for(opp, playable_from_prior=True):
+                    has_useful_moves = True
+                    break
+
+                playable_dests = st_after_move.playable_destinations(revealed_card)
+
+                # does it reveal a card that is playable to a foundation?
+                if playable_dests.has_type(LocationType.FOUNDATION):
+                    has_useful_moves = True
+                    break
+
+                # otherwise, does it reveal a non-king on an empty slot that is
+                # playable to another stack?
+                if (not len(t_after_move.hidden) == 0 or not revealed_card.rank == Rank.KING) and playable_dests.has_type(LocationType.TABLEAU):
+                    has_useful_moves = True
+                    break
+
+            if has_useful_moves:
+                return True
+
             # - AND For all accessible cards from stock, it is not true that:
             #   - it is playable to tableau or foundation
+            for c in st.accessible_stock_cards:
+                if st.playable_destinations(c).len() > 0:
+                    has_useful_moves = True
+                    break
 
-        return True
+        return has_useful_moves
             
     @property
     def hand(self) -> Deck:
