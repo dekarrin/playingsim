@@ -177,6 +177,74 @@ class Card:
         else:
             self.rank = CustomRank(str(rank))
 
+    @classmethod
+    def kings(cls) -> list['Card']:
+        return [Card(s, Rank.KING) for s in Suit]
+    
+    @classmethod
+    def queens(cls) -> list['Card']:
+        return [Card(s, Rank.QUEEN) for s in Suit]
+    
+    @classmethod
+    def jacks(cls) -> list['Card']:
+        return [Card(s, Rank.JACK) for s in Suit]
+    
+    @classmethod
+    def tens(cls) -> list['Card']:
+        return [Card(s, Rank.TEN) for s in Suit]
+    
+    @classmethod
+    def nines(cls) -> list['Card']:
+        return [Card(s, Rank.NINE) for s in Suit]
+    
+    @classmethod
+    def eights(cls) -> list['Card']:
+        return [Card(s, Rank.EIGHT) for s in Suit]
+    
+    @classmethod
+    def sevens(cls) -> list['Card']:
+        return [Card(s, Rank.SEVEN) for s in Suit]
+    
+    @classmethod
+    def sixes() -> list['Card']:
+        return [Card(s, Rank.SIX) for s in Suit]
+    
+    @classmethod
+    def fives(cls) -> list['Card']:
+        return [Card(s, Rank.FIVE) for s in Suit]
+    
+    @classmethod
+    def fours(cls) -> list['Card']:
+        return [Card(s, Rank.FOUR) for s in Suit]
+    
+    @classmethod
+    def threes(cls) -> list['Card']:
+        return [Card(s, Rank.THREE) for s in Suit]
+    
+    @classmethod
+    def twos(cls) -> list['Card']:
+        return [Card(s, Rank.TWO) for s in Suit]
+    
+    @classmethod
+    def aces(cls) -> list['Card']:
+        return [Card(s, Rank.ACE) for s in Suit]
+    
+    @classmethod
+    def of_hearts(cls) -> list['Card']:
+        return [Card(Suit.HEARTS, r) for r in Rank]
+    
+    @classmethod
+    def of_diamonds(cls) -> list['Card']:
+        return [Card(Suit.DIAMONDS, r) for r in Rank]
+    
+    @classmethod
+    def of_clubs(cls) -> list['Card']:
+        return [Card(Suit.CLUBS, r) for r in Rank]
+    
+    @classmethod
+    def of_spades(cls) -> list['Card']:
+        return [Card(Suit.SPADES, r) for r in Rank]
+
     def __str__(self) -> str:
         return f"{self.rank.short()}{self.suit.short()}"
     

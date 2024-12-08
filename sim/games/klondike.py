@@ -378,6 +378,14 @@ class MoveTableauStackAction(Action):
         self.dest_pile = dest_pile
         self.count = count
 
+    @property
+    def source(self) -> Location:
+        return TableauPosition(self.source_pile)
+    
+    @property
+    def dest(self) -> Location:
+        return TableauPosition(self.dest_pile)
+
     def __str__(self):
         return "Move T{:d} -> T{:d}, stack of {:d}".format(self.source_pile, self.dest_pile, self.count)
     
@@ -427,13 +435,24 @@ class State:
         self.pass_limit = pass_limit
         self.draw_count = draw_count
 
-    def meaningfully_increases_dests_for(self, c: Card, where_dest_type: LocationType | Location | str | None=None) -> bool:
+    def meaningfully_increases_dests_for(self, c: Card | list[Card], where_dest_type: LocationType | Location | str | None=None, playable_from_prior: bool=False) -> bool:
         playable_dests = self.playable_destinations(c)
         if where_dest_type is not None:
             playable_dests = playable_dests.where(where_dest_type)
         playable_to_count = playable_dests.len()
-        playable_count = self.find_playable_singles(color=c, rank=c, in_waste=False).len()
-        playable_count += self.accessible_stock_cards.where(color=c, rank=c).len()
+        playable_count = 0
+
+        cards = c
+        if isinstance(c, Card):
+            cards = [c]
+        
+        for c in cards:
+            playable_count += self.find_playable_singles(color=c, rank=c, in_waste=False).len()
+            playable_count += self.accessible_stock_cards.where(color=c, rank=c).len()
+        
+        if playable_from_prior:
+            playable_count -= 1
+        
         return playable_to_count <= playable_count
 
     @property
@@ -1079,8 +1098,8 @@ class Game(BaseGame):
 
             from_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.FOUNDATION]
             tableau_to_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.TABLEAU and m.dest.type == LocationType.FOUNDATION]
-            split_stack_moves = [m for m in stack_moves if m.splits_stack(st)]
             full_stack_moves = [m for m in stack_moves if not m.splits_stack(st)]
+            split_stack_moves = [m for m in stack_moves if m.splits_stack(st)]
 
             has_useful_moves = False
 
@@ -1191,6 +1210,22 @@ class Game(BaseGame):
             #     blank spaces would be less than/equal to the number of currently
             #     playable kings in stock or tableau or foundation, AND the top of
             #     stack is not a king.
+            for m in full_stack_moves:
+                t = st.tableau_from_location(m.source)
+                st_after_move = self.state_with_turn_applied(m)
+
+                # does it reveal a hidden card? it will if there's anything
+                # under it
+                if len(t.hidden) > 0:
+                    has_useful_moves = True
+                    break
+
+                # or, does it reveal a space that lets more kings play, and it
+                # isn't itself a king?
+                elif t.top().rank != Rank.KING and st_after_move.meaningfully_increases_dests_for(Card.kings()):
+                    has_useful_moves = True
+                    break
+
             # - AND For all non-full-stack moves from tableau, it is not true that:
             #   - the move reveals a non-hidden card such that the total number of that
             #     particular rank and color of card that can be played to would be
