@@ -10,7 +10,7 @@ class CustomSuit:
     """
 
     def __init__(self, name: str, short: str | None=None, value: int | None=0, is_red: bool | None=False):
-        self.name = name
+        self.name = "CUSTOM:" + name
         self._short = short if short is not None else name[0].upper()
         self._value = value if value is not None else 0
         self._is_red = is_red is not None and is_red
@@ -81,9 +81,15 @@ class CustomRank:
     """
 
     def __init__(self, name: str, short: str | None=None, value: int | None=None):
-        self.name = name
+        self.name = "CUSTOM:" + name
         self._short = short if short is not None else name[0].upper()
         self._value = value if value is not None else 0
+
+    def __repr__(self) -> str:
+        return f"CustomRank({self.name}, short={repr(self._short)}, value={repr(self._value)})"
+    
+    def __str__(self) -> str:
+        return self.name
 
     def short(self) -> str:
         return self._short
@@ -166,7 +172,7 @@ class Card:
     hearts, or spades, and rank of Ace through King.
     """
 
-    def __init__(self, suit: Suit | Any, rank: Rank | Any):
+    def __init__(self, rank: Rank | Any, suit: Suit | Any):
         if isinstance(suit, Suit):
             self.suit = suit
         else:
@@ -179,77 +185,77 @@ class Card:
 
     @classmethod
     def kings(cls) -> list['Card']:
-        return [Card(s, Rank.KING) for s in Suit]
+        return [Card(Rank.KING, s) for s in Suit]
     
     @classmethod
     def queens(cls) -> list['Card']:
-        return [Card(s, Rank.QUEEN) for s in Suit]
+        return [Card(Rank.QUEEN, s) for s in Suit]
     
     @classmethod
     def jacks(cls) -> list['Card']:
-        return [Card(s, Rank.JACK) for s in Suit]
+        return [Card(Rank.JACK, s) for s in Suit]
     
     @classmethod
     def tens(cls) -> list['Card']:
-        return [Card(s, Rank.TEN) for s in Suit]
+        return [Card(Rank.TEN, s) for s in Suit]
     
     @classmethod
     def nines(cls) -> list['Card']:
-        return [Card(s, Rank.NINE) for s in Suit]
+        return [Card(Rank.NINE, s) for s in Suit]
     
     @classmethod
     def eights(cls) -> list['Card']:
-        return [Card(s, Rank.EIGHT) for s in Suit]
+        return [Card(Rank.EIGHT, s) for s in Suit]
     
     @classmethod
     def sevens(cls) -> list['Card']:
-        return [Card(s, Rank.SEVEN) for s in Suit]
+        return [Card(Rank.SEVEN, s) for s in Suit]
     
     @classmethod
     def sixes() -> list['Card']:
-        return [Card(s, Rank.SIX) for s in Suit]
+        return [Card(Rank.SIX, s) for s in Suit]
     
     @classmethod
     def fives(cls) -> list['Card']:
-        return [Card(s, Rank.FIVE) for s in Suit]
+        return [Card(Rank.FIVE, s) for s in Suit]
     
     @classmethod
     def fours(cls) -> list['Card']:
-        return [Card(s, Rank.FOUR) for s in Suit]
+        return [Card(Rank.FOUR, s) for s in Suit]
     
     @classmethod
     def threes(cls) -> list['Card']:
-        return [Card(s, Rank.THREE) for s in Suit]
+        return [Card(Rank.THREE, s) for s in Suit]
     
     @classmethod
     def twos(cls) -> list['Card']:
-        return [Card(s, Rank.TWO) for s in Suit]
+        return [Card(Rank.TWO, s) for s in Suit]
     
     @classmethod
     def aces(cls) -> list['Card']:
-        return [Card(s, Rank.ACE) for s in Suit]
+        return [Card(Rank.ACE, s) for s in Suit]
     
     @classmethod
     def of_hearts(cls) -> list['Card']:
-        return [Card(Suit.HEARTS, r) for r in Rank]
+        return [Card(r, Suit.HEARTS) for r in Rank]
     
     @classmethod
     def of_diamonds(cls) -> list['Card']:
-        return [Card(Suit.DIAMONDS, r) for r in Rank]
+        return [Card(r, Suit.DIAMONDS) for r in Rank]
     
     @classmethod
     def of_clubs(cls) -> list['Card']:
-        return [Card(Suit.CLUBS, r) for r in Rank]
+        return [Card(r, Suit.CLUBS) for r in Rank]
     
     @classmethod
     def of_spades(cls) -> list['Card']:
-        return [Card(Suit.SPADES, r) for r in Rank]
+        return [Card(r, Suit.SPADES) for r in Rank]
 
     def __str__(self) -> str:
         return f"{self.rank.short()}{self.suit.short()}"
     
     def __repr__(self) -> str:
-        return f"<{self.rank} of {self.suit}>"
+        return f"<{self.rank.name} of {self.suit.name}>"
     
     def __eq__(self, other) -> bool:
         if not isinstance(other, Card):
@@ -279,13 +285,13 @@ class Card:
         return self.suit.red()
     
     def clone(self) -> 'Card':
-        return Card(self.suit, self.rank)
+        return Card(self.rank, self.suit)
     
     @classmethod
     def parse(cls, s: str) -> 'Card':
         if len(s) != 2:
             raise ValueError(f"Invalid card: {s}")
         
-        return Card(Suit.parse(s[1]), Rank.parse(s[0]))
+        return Card(Rank.parse(s[0]), Suit.parse(s[1]))
     
 

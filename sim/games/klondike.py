@@ -146,11 +146,11 @@ class Foundation:
 
     def needs(self) -> Card | None:
         if len(self.cards) == 0:
-            return Card(self.suit, Rank.ACE)
+            return Card(Rank.ACE, self.suit)
         elif len(self.cards) == Rank.KING.value:
             return None
         
-        return Card(self.suit, self.cards[0].rank + 1)
+        return Card(self.cards[0].rank + 1, self.suit)
 
     def remove(self) -> Card:
         if len(self.cards) == 0:
@@ -231,15 +231,15 @@ class Pile:
         """
         n = []
         if len(self.shown) == 0:
-            n = [Card(s, Rank.KING) for s in Suit]
+            n = [Card(Rank.KING, s) for s in Suit]
         elif self.shown[0] == Rank.ACE:
             n = []
         else:
             t = self.top()
             if t.is_black():
-                n = [Card(Suit.DIAMONDS, t.rank - 1), Card(Suit.HEARTS, t.rank - 1)]
+                n = [Card(t.rank - 1, Suit.DIAMONDS), Card(t.rank - 1, Suit.HEARTS)]
             else:
-                n = [Card(Suit.CLUBS, t.rank - 1), Card(Suit.SPADES, t.rank - 1)]
+                n = [Card(t.rank - 1, Suit.CLUBS), Card(t.rank - 1, Suit.SPADES)]
         
         return CardList(n)
     
@@ -515,7 +515,7 @@ class State:
 
                 # otherwise, would the move meaningfully increase the number
                 # of playable-to cards of that rank and color?
-                opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                opp = Card(moved_card.rank - 1, Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS)
                 if st_after_move.meaningfully_increases_dests_for(opp):
                     has_useful_moves = True
                     break
@@ -573,14 +573,14 @@ class State:
                 # of playable-to cards of revealed cards rank and color?
                 # TODO: modularize this? at least two are identical, there
                 # is one in block above
-                opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                opp = Card(moved_card.rank - 1, Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS)
                 if st_after_move.meaningfully_increases_dests_for(opp):
                     has_useful_moves = True
                     break
 
             # otherwise, would the move meaningfully increase the number of
             # playable-to foundation piles of moved card's rank and suit?
-            next = Card(t.top().suit, t.top().rank + 1)
+            next = Card(t.top().rank + 1, t.top().suit)
             if st_after_move.meaningfully_increases_dests_for(next, where_dest_type=LocationType.FOUNDATION):
                 has_useful_moves = True
                 break
@@ -630,7 +630,7 @@ class State:
             revealed_card = t_after_move.top()
 
             # does it reveal a card that would increase playable-to slots?
-            opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+            opp = Card(moved_card.rank - 1, Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS)
             if st_after_move.meaningfully_increases_dests_for(opp, playable_from_prior=True):
                 has_useful_moves = True
                 break

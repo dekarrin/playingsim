@@ -16,7 +16,7 @@ class Deck:
         """
 
         if cards is None:
-            cards = [card.Card(s, r) for r in card.Rank for s in card.Suit]
+            cards = [card.Card(r, s) for r in card.Rank for s in card.Suit]
 
         self.cards = cards
 
