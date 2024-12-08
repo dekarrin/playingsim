@@ -8,6 +8,103 @@ from enum import Enum, IntEnum, auto
 from typing import Callable
 
 
+class LocationType(Enum):
+    TABLEAU = auto()
+    FOUNDATION = auto()
+    WASTE = auto()
+
+    def __str__(self) -> str:
+        return self.name.title()
+
+class Location:
+    def __init__(self, type: LocationType):
+        self.type = type
+
+    def __str__(self) -> str:
+        return str(self.type)
+
+
+class LocationList(list[Location]):
+    def has_type(self, t: LocationType) -> bool:
+        for loc in self:
+            if loc.type == t:
+                return True
+        return False
+    
+    def len(self) -> int:
+        return len(self)
+    
+class CardList(list[Card]):
+    def find(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None) -> 'CardList':
+        """
+        Return the locations of all cards that are currently playable as a
+        single card (i.e. excluding the backs of multi-card stacks) that match
+        the given conditions (color, suit, and/or rank). If no conditions are
+        given, all playable single card locations are returned.
+
+        Note that if in_waste is enabled, it will check only the top card in
+        the waste pile, and will not consider any further ones.
+        """
+        no_filters = color is None and suit is None and rank is None
+
+        if color is not None:
+            if isinstance(color, str):
+                if color.lower() == "black":
+                    color = "black"
+                elif color.lower() == "red":
+                    color = "red"
+                else:
+                    raise ValueError("Invalid color string")
+            elif isinstance(color, Card):
+                color = color.color()
+            elif isinstance(color, Suit):
+                color = color.color()
+            else:
+                raise ValueError("Invalid color value, must be Card, str, or Suit")
+            
+        if suit is not None:
+            if isinstance(suit, str):
+                suit = Suit.parse(suit)
+            elif isinstance(suit, Card):
+                suit = suit.suit
+            elif not isinstance(suit, Suit):
+                raise ValueError("Invalid suit value, must be Card, str, or Suit")
+            
+        if rank is not None:
+            if isinstance(rank, str):
+                rank = Rank.parse(rank)
+            elif isinstance(rank, int):
+                # this is fine, actually, we can directly compare
+                pass
+            elif isinstance(rank, Card):
+                rank = rank.rank
+            elif not isinstance(rank, Rank):
+                raise ValueError("Invalid rank value, must be Card, str, int, or Rank")
+
+        def cond(c: Card) -> bool:
+            if no_filters:
+                return True
+            else:
+                if color is not None and c.color() != color:
+                    return False
+                if suit is not None and c.suit != suit:
+                    return False
+                if rank is not None and c.rank != rank:
+                    return False
+                return True
+
+        # filter it by cond
+        matches = CardList()
+        for c in self:
+            if cond(c):
+                matches.append(c)
+
+        return matches
+    
+    def len(self) -> int:
+        return len(self)
+
+
 class Foundation:
     """
     Ultimate destination for all cards of a given suit. Index -1 is the bottom of
@@ -16,7 +113,7 @@ class Foundation:
 
     def __init__(self, suit: Suit):
         self.suit = suit
-        self.cards: list[Card] = []
+        self.cards: CardList = CardList()
 
     def add(self, card: Card):
         if card.suit != self.suit:
@@ -75,8 +172,8 @@ class Pile:
         
         cards = list(cards)
 
-        self.shown: list[Card] = []
-        self.hidden: list[Card] = []
+        self.shown: CardList = CardList()
+        self.hidden: CardList = CardList()
 
         if len(cards) > 0:
             self.shown = [cards[0]]
@@ -89,7 +186,7 @@ class Pile:
     def __getitem__(self, key) -> Card:
         return (self.shown + self.hidden)[key]
     
-    def take(self, count: int) -> list[Card]:
+    def take(self, count: int) -> CardList:
         """
         Remove the top count cards from the pile's shown cards and return them.
         If there are fewer than count cards in the pile's shown cards, raises a
@@ -104,9 +201,9 @@ class Pile:
         if len(self.shown) == 0 and len(self.hidden) > 0:
             self.shown = [self.hidden[0]]
             del self.hidden[0]
-        return cards
+        return CardList(cards)
 
-    def needs(self) -> list[Card]:
+    def needs(self) -> CardList:
         """
         Return a list of all cards that could be used to continue building this
         tableau. This will either be all four kings (if the pile is empty), the
@@ -114,16 +211,19 @@ class Pile:
         or an empty list if no cards could be placed on the pile (if it
         currently has an Ace on top).
         """
+        n = []
         if len(self.shown) == 0:
-            return [Card(s, Rank.KING) for s in Suit]
+            n = [Card(s, Rank.KING) for s in Suit]
         elif self.shown[0] == Rank.ACE:
-            return []
+            n = []
         else:
             t = self.top()
             if t.is_black():
-                return [Card(Suit.DIAMONDS, t.rank - 1), Card(Suit.HEARTS, t.rank - 1)]
+                n = [Card(Suit.DIAMONDS, t.rank - 1), Card(Suit.HEARTS, t.rank - 1)]
             else:
-                return [Card(Suit.CLUBS, t.rank - 1), Card(Suit.SPADES, t.rank - 1)]
+                n = [Card(Suit.CLUBS, t.rank - 1), Card(Suit.SPADES, t.rank - 1)]
+        
+        return CardList(n)
     
     def give(self, cards: list[Card]):
         """Add the given cards to the top of the revealed section of the pile.
@@ -188,20 +288,6 @@ class TurnType(IntEnum):
         return self.value < other.value
 
 
-class LocationType(Enum):
-    TABLEAU = auto()
-    FOUNDATION = auto()
-    WASTE = auto()
-
-    def __str__(self) -> str:
-        return self.name.title()
-
-class Location:
-    def __init__(self, type: LocationType):
-        self.type = type
-
-    def __str__(self) -> str:
-        return str(self.type)
 
 class TableauPosition(Location):
     def __init__(self, pile: int):
@@ -312,12 +398,6 @@ class MoveOneAction(Action):
     def __str__(self):
         return f"Move {self.source} card to {self.dest}"
 
-class LocationList(list[Location]):
-    def has_type(self, t: LocationType) -> bool:
-        for loc in self:
-            if loc.type == t:
-                return True
-        return False
 
 class State:
     def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0, draw_count: int=0):
@@ -334,7 +414,7 @@ class State:
         return self.pass_limit - self.current_stock_pass if self.pass_limit > 0 else -1
     
     @property
-    def accessible_stock_cards(self) -> list[Card]:
+    def accessible_stock_cards(self) -> CardList:
         """
         Return the stock cards that the player could currently access, either by
         drawing to it via zero or one flip or by it being the current face-up
@@ -342,7 +422,7 @@ class State:
         least once.
         """
 
-        accessibles = list()
+        accessibles = CardList()
 
         # Include the card currently in the waste pile, if there is one:
         if len(self.waste) > 0:
@@ -552,13 +632,13 @@ class State:
             locs.append(WastePosition())
 
         # filter it by cond
-        matches = list()
+        matches = LocationList()
         for loc in locs:
             c = self.top_of(loc)
             if c is not None and cond(c):
                 matches.append(loc)
 
-        return locs
+        return matches
     
     def board(self, reveal_hidden=False) -> str:
         """
@@ -1001,17 +1081,16 @@ class Game(BaseGame):
                     # foundation?
                     pos: FoundationPosition = m.source
                     revealed_card = st_after_move.foundation_from_location(pos).top()
-                    revealed_playable_to = st_after_move.playable_destinations(revealed_card)
-                    if any(l.type == LocationType.TABLEAU for l in revealed_playable_to):
+                    if st_after_move.playable_destinations(revealed_card).has_type(LocationType.TABLEAU):
                         has_useful_moves = True
                         break
 
                     # otherwise, would the move meaningfully increase the number
                     # of playable-to cards of that rank and color?
                     opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                    playable_to_count = len(st_after_move.playable_destinations(opp))
-                    playable_count = len(st_after_move.find_playable_singles(color=opp.color(), rank=opp.rank, in_waste=False))
-                    playable_count += len(c for c in st_after_move.accessible_stock_cards if c.color() == opp.color() and c.rank == opp.rank)
+                    playable_to_count = st_after_move.playable_destinations(opp).len()
+                    playable_count = st_after_move.find_playable_singles(color=opp.color(), rank=opp.rank, in_waste=False).len()
+                    playable_count += st_after_move.accessible_stock_cards.find(color=opp.color(), rank=opp.rank).len()
                     if playable_to_count <= playable_count:
                         has_useful_moves = True
                         break
