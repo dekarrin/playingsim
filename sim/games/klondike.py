@@ -22,6 +22,11 @@ class Location:
 
     def __str__(self) -> str:
         return str(self.type)
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Location):
+            return False
+        return self.type == other.type
 
 
 class LocationList(list[Location]):
@@ -168,6 +173,11 @@ class Foundation:
     def __len__(self) -> int:
         return len(self.cards)
     
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Foundation):
+            return False
+        return self.suit == other.suit and self.cards == other.cards
+    
     def clone(self) -> 'Foundation':
         f = Foundation(self.suit)
         f.cards = list([c.clone() for c in self.cards])
@@ -200,6 +210,11 @@ class Pile:
 
     def __len__(self) -> int:
         return len(self.shown + self.hidden)
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, Pile):
+            return False
+        return self.shown == other.shown and self.hidden == other.hidden
     
     def __getitem__(self, key) -> Card:
         return (self.shown + self.hidden)[key]
@@ -314,6 +329,8 @@ class TableauPosition(Location):
 
     def __str__(self):
         return f"T{self.pile}"
+    
+    def __eq__(self, other) -> bool:
 
 
 class WastePosition(Location):
@@ -423,7 +440,6 @@ class MoveOneAction(Action):
         
     def __str__(self):
         return f"Move {self.source} card to {self.dest}"
-
 
 class State:
     def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0, draw_count: int=0):
@@ -771,8 +787,7 @@ class State:
         g.waste = self.waste.clone()
         g.stock = self.stock.clone()
         g.current_stock_pass = self.current_stock_pass
-        g.undo()
-        return g.state_with_turn_applied(self, action)
+        return g.state_with_turn_applied(action)
     
     def clone(self) -> 'State':
         return State(
@@ -781,7 +796,8 @@ class State:
             stock=self.stock.clone(),
             waste=self.waste.clone(),
             current_stock_pass=self.current_stock_pass,
-            pass_limit=self.pass_limit
+            pass_limit=self.pass_limit,
+            draw_count=self.draw_count,
         )
     
     def playable_destinations(self, c: Card) -> LocationList:
