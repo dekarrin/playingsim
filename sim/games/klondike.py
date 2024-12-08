@@ -986,7 +986,7 @@ class State:
                 board += border
         board += '\n'
 
-        if not self.has_useful_moves():
+        if self.has_useful_moves() is False:
             board += "(NO MOVES DETECTED)\n"
 
         return board
