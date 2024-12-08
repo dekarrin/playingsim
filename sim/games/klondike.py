@@ -454,6 +454,211 @@ class State:
             playable_count -= 1
         
         return playable_to_count <= playable_count
+    
+    
+    def has_useful_moves(self) -> bool:
+        """
+        Returns None if it cannot be determined due to passes.
+        """
+
+        if not (self.current_stock_pass > 1 or (len(self.stock) == 0 and self.pass_limit != 1)):
+            return None
+        
+        moves = self.legal_moves()
+    
+        if len(moves) == 0:
+            return False
+        
+        # definition of no useful moves remaining using only knowledge that
+        # player would have, generalized to multiple decks. NOT generalized
+        # to 1-pass limit over stock; this relies on knowledge of stock,
+        # which would be impossible to gain as it depends on having been
+        # through it at least once.
+
+        single_card_moves: list[MoveOneAction] = [m for m in moves if m.type == TurnType.MOVE_ONE]
+        stack_moves: list[MoveTableauStackAction] = [m for m in moves if m.type == TurnType.MOVE_TABLEAU_STACK]
+
+        from_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.FOUNDATION]
+        tableau_to_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.TABLEAU and m.dest.type == LocationType.FOUNDATION]
+        full_stack_moves = [m for m in stack_moves if not m.splits_stack(self)]
+        split_stack_moves = [m for m in stack_moves if m.splits_stack(self)]
+
+        has_useful_moves = False
+
+        # - For all moves from a foundation, it is not true that:
+        #   - The move is to a tableau pile
+        #   - AND the card being moved is not an Ace, as pulling an ace from
+        #     a foundation is never useful.
+        #   - AND:
+        #     - The move would reveal a card which is playable to tableau.
+        #     - OR after the card is moved, the number of playable-to cards
+        #       of that card's color and rank is less than or equal to the
+        #       number of then-playable opposite color and -1 rank cards in
+        #       stock or tableau or foundation.
+        for m in from_foundation_moves:
+
+            # Check that the move is to a tableau pile and the card is not
+            # an Ace.
+
+            moved_card = self.foundation_from_location(m.source).top()
+
+            if m.dest.type == LocationType.TABLEAU and moved_card.rank != Rank.ACE:
+                st_after_move = self.after(m)
+
+                # did it reveal another card playable to tableau from same
+                # foundation?
+                pos: FoundationPosition = m.source
+                revealed_card = st_after_move.foundation_from_location(pos).top()
+                if st_after_move.playable_destinations(revealed_card).has_type(LocationType.TABLEAU):
+                    has_useful_moves = True
+                    break
+
+                # otherwise, would the move meaningfully increase the number
+                # of playable-to cards of that rank and color?
+                opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                if st_after_move.meaningfully_increases_dests_for(opp):
+                    has_useful_moves = True
+                    break
+
+        if has_useful_moves:
+            return True
+        
+        # - AND For all moves to foundation from tableau, it is not true that:
+        #   - the move reveals a hidden card
+        #   - OR the move reveals a non-hidden card such that:
+        #     - revealed card is itself is playable to foundation
+        #     - OR reaveled card is playable to another stack
+        #       - AND the revealed card is not a king on an empty.
+        #     - OR game state is changed such that the total number of cards
+        #       of revealed card's color and rank that can be played to
+        #       would be less than equal to the number of currently playable
+        #       opposite color and -1 rank cards in stock or tableau or
+        #       foundation.
+        #   - OR the move changes game state such that the number of playable-to
+        #     foundation piles of that card's exact rank and suit would be less
+        #     than/equal to the number of currently playable cards of the same
+        #     suit with rank +1 in stock or tableau. For simplicity,
+        #     we assume that a move from foundation-foundation would itself always be
+        #     a useless move, as the overall game state wouldn't advance, so
+        #     we do not consider it.
+        for m in tableau_to_foundation_moves:
+            t = self.tableau_from_location(m.source)
+
+            # does it reveal a hidden card? it will if it's the last
+            # non-hidden card from the tableau, and tableau has at least one
+            # hidden card. don't check for an empty-cell reveal; that is
+            # handled by another check.
+            if len(t.hidden) > 0 and len(t.shown) == 1:
+                has_useful_moves = True
+                break
+
+            st_after_move = self.after(m)
+
+            # does it reveal a non-hidden card...
+            if len(t.shown) > 1:
+                revealed_card = t.shown[1]
+                playable_dests = st_after_move.playable_destinations(revealed_card)
+
+                #  ...that is playable to foundation?
+                if playable_dests.has_type(LocationType.FOUNDATION):
+                    has_useful_moves = True
+                    break
+                
+                # ...or that is playable to another stack and is not the king on an empty?
+                elif (not len(t.hidden) == 0 or not revealed_card.rank == Rank.KING) and playable_dests.has_type(LocationType.TABLEAU):
+                    has_useful_moves = True
+                    break
+
+                # otherwise, would the move meaningfully increase the number
+                # of playable-to cards of revealed cards rank and color?
+                # TODO: modularize this? at least two are identical, there
+                # is one in block above
+                opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                if st_after_move.meaningfully_increases_dests_for(opp):
+                    has_useful_moves = True
+                    break
+
+            # otherwise, would the move meaningfully increase the number of
+            # playable-to foundation piles of moved card's rank and suit?
+            next = Card(t.top().suit, t.top().rank + 1)
+            if st_after_move.meaningfully_increases_dests_for(next, where_dest_type=LocationType.FOUNDATION):
+                has_useful_moves = True
+                break
+
+        if has_useful_moves:
+            return True
+
+        # - AND For all full-stack moves from tableau, it is not true that
+        #   - the move reveals a hidden card
+        #   - OR the move reveals a blank space such that the total number of
+        #     blank spaces would be less than/equal to the number of currently
+        #     playable kings in stock or tableau or foundation, AND the top of
+        #     stack is not a king.
+        for m in full_stack_moves:
+            t = self.tableau_from_location(m.source)
+            st_after_move = self.after(m)
+
+            # does it reveal a hidden card? it will if there's anything
+            # under it
+            if len(t.hidden) > 0:
+                has_useful_moves = True
+                break
+
+            # or, does it reveal a space that lets more kings play, and it
+            # isn't itself a king?
+            elif t.top().rank != Rank.KING and st_after_move.meaningfully_increases_dests_for(Card.kings()):
+                has_useful_moves = True
+                break
+
+        if has_useful_moves:
+            return True
+
+        # - AND For all non-full-stack moves from tableau, it is not true that:
+        #   - the move reveals a non-hidden card such that the total number of that
+        #     particular rank and color of card that can be played to would be
+        #     less than/equal to the number of currently playable opposite color
+        #     and -1 rank cards in stock or tableau or foundation, excluding the
+        #     top of the moved stack.
+        #   - OR the move reveals a non-hidden card which:
+        #     - Itself is playable to foundation
+        #     - OR is playable to another stack
+        #       - AND the revealed card is not a king on an empty.
+        for m in split_stack_moves:
+            t = self.tableau_from_location(m.source)
+            st_after_move = self.after(m)
+            t_after_move = st_after_move.tableau_from_location(m.source)
+            revealed_card = t_after_move.top()
+
+            # does it reveal a card that would increase playable-to slots?
+            opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+            if st_after_move.meaningfully_increases_dests_for(opp, playable_from_prior=True):
+                has_useful_moves = True
+                break
+
+            playable_dests = st_after_move.playable_destinations(revealed_card)
+
+            # does it reveal a card that is playable to a foundation?
+            if playable_dests.has_type(LocationType.FOUNDATION):
+                has_useful_moves = True
+                break
+
+            # otherwise, does it reveal a non-king on an empty slot that is
+            # playable to another stack?
+            if (not len(t_after_move.hidden) == 0 or not revealed_card.rank == Rank.KING) and playable_dests.has_type(LocationType.TABLEAU):
+                has_useful_moves = True
+                break
+
+        if has_useful_moves:
+            return True
+
+        # - AND For all accessible cards from stock, it is not true that:
+        #   - it is playable to tableau or foundation
+        for c in self.accessible_stock_cards:
+            if self.playable_destinations(c).len() > 0:
+                has_useful_moves = True
+                break
+
+        return has_useful_moves
 
     @property
     def remaining_stock_flips(self) -> int:
@@ -555,6 +760,19 @@ class State:
         else:
             raise ValueError("Invalid location type")
 
+    def after(self, action: Action) -> 'State':
+        """
+        Returns a copy of what State this one will become if the given action is
+        taken.
+        """
+        g = Game(draw_count=self.draw_count, stock_pass_limit=self.pass_limit, deck=None, num_piles=len(self.tableau))
+        g.tableau = list(p.clone() for p in self.tableau)
+        g.foundations = {s: f.clone() for s, f in self.foundations.items()}
+        g.waste = self.waste.clone()
+        g.stock = self.stock.clone()
+        g.current_stock_pass = self.current_stock_pass
+        g.undo()
+        return g.state_with_turn_applied(self, action)
     
     def clone(self) -> 'State':
         return State(
@@ -888,8 +1106,7 @@ class Game(BaseGame):
             if not isinstance(action, MoveTableauStackAction):
                 raise ValueError("MoveTableauStackAction required for MOVE_TABLEAU_STACK turn type")
             
-            act: MoveTableauStackAction = action
-            self.move_tableau_stack(act.source_pile, act.dest_pile, act.count)
+            self.move_tableau_stack(action.source_pile, action.dest_pile, action.count)
         elif action.type == TurnType.MOVE_ONE:
             if not isinstance(action, MoveOneAction):
                 raise ValueError("MoveOneAction required for MOVE_ONE turn type")
@@ -1078,205 +1295,11 @@ class Game(BaseGame):
         # at least once. Ergo, no-useful-move detection can only be done if the
         # pass limit is > 1 and the stock has been gone through at least once.
         
-        elif self.current_stock_pass > 1 or (len(self.stock) == 0 and self.stock_pass_limit != 1):
-            pass
-    
-            st = self.state
-            moves = st.legal_moves()
+        # TODO: enable this after validation
+        #elif self.has_useful_moves() is False:
+        #    return False
         
-            if len(moves) == 0:
-                return False
-            
-            # definition of no useful moves remaining using only knowledge that
-            # player would have, generalized to multiple decks. NOT generalized
-            # to 1-pass limit over stock; this relies on knowledge of stock,
-            # which would be impossible to gain as it depends on having been
-            # through it at least once.
-
-            single_card_moves: list[MoveOneAction] = [m for m in moves if m.type == TurnType.MOVE_ONE]
-            stack_moves: list[MoveTableauStackAction] = [m for m in moves if m.type == TurnType.MOVE_TABLEAU_STACK]
-
-            from_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.FOUNDATION]
-            tableau_to_foundation_moves = [m for m in single_card_moves if m.source.type == LocationType.TABLEAU and m.dest.type == LocationType.FOUNDATION]
-            full_stack_moves = [m for m in stack_moves if not m.splits_stack(st)]
-            split_stack_moves = [m for m in stack_moves if m.splits_stack(st)]
-
-            has_useful_moves = False
-
-            # - For all moves from a foundation, it is not true that:
-            #   - The move is to a tableau pile
-            #   - AND the card being moved is not an Ace, as pulling an ace from
-            #     a foundation is never useful.
-            #   - AND:
-            #     - The move would reveal a card which is playable to tableau.
-            #     - OR after the card is moved, the number of playable-to cards
-            #       of that card's color and rank is less than or equal to the
-            #       number of then-playable opposite color and -1 rank cards in
-            #       stock or tableau or foundation.
-            for m in from_foundation_moves:
-
-                # Check that the move is to a tableau pile and the card is not
-                # an Ace.
-
-                moved_card = st.foundation_from_location(m.source).top()
-
-                if m.dest.type == LocationType.TABLEAU and moved_card.rank != Rank.ACE:
-                    st_after_move = self.state_with_turn_applied(m)
-
-                    # did it reveal another card playable to tableau from same
-                    # foundation?
-                    pos: FoundationPosition = m.source
-                    revealed_card = st_after_move.foundation_from_location(pos).top()
-                    if st_after_move.playable_destinations(revealed_card).has_type(LocationType.TABLEAU):
-                        has_useful_moves = True
-                        break
-
-                    # otherwise, would the move meaningfully increase the number
-                    # of playable-to cards of that rank and color?
-                    opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                    if st_after_move.meaningfully_increases_dests_for(opp):
-                        has_useful_moves = True
-                        break
-
-            if has_useful_moves:
-                return True
-            
-            # - AND For all moves to foundation from tableau, it is not true that:
-            #   - the move reveals a hidden card
-            #   - OR the move reveals a non-hidden card such that:
-            #     - revealed card is itself is playable to foundation
-            #     - OR reaveled card is playable to another stack
-            #       - AND the revealed card is not a king on an empty.
-            #     - OR game state is changed such that the total number of cards
-            #       of revealed card's color and rank that can be played to
-            #       would be less than equal to the number of currently playable
-            #       opposite color and -1 rank cards in stock or tableau or
-            #       foundation.
-            #   - OR the move changes game state such that the number of playable-to
-            #     foundation piles of that card's exact rank and suit would be less
-            #     than/equal to the number of currently playable cards of the same
-            #     suit with rank +1 in stock or tableau. For simplicity,
-            #     we assume that a move from foundation-foundation would itself always be
-            #     a useless move, as the overall game state wouldn't advance, so
-            #     we do not consider it.
-            for m in tableau_to_foundation_moves:
-                t = st.tableau_from_location(m.source)
-
-                # does it reveal a hidden card? it will if it's the last
-                # non-hidden card from the tableau, and tableau has at least one
-                # hidden card. don't check for an empty-cell reveal; that is
-                # handled by another check.
-                if len(t.hidden) > 0 and len(t.shown) == 1:
-                    has_useful_moves = True
-                    break
-
-                st_after_move = self.state_with_turn_applied(m)
-
-                # does it reveal a non-hidden card...
-                if len(t.shown) > 1:
-                    revealed_card = t.shown[1]
-                    playable_dests = st_after_move.playable_destinations(revealed_card)
-
-                    #  ...that is playable to foundation?
-                    if playable_dests.has_type(LocationType.FOUNDATION):
-                        has_useful_moves = True
-                        break
-                    
-                    # ...or that is playable to another stack and is not the king on an empty?
-                    elif (not len(t.hidden) == 0 or not revealed_card.rank == Rank.KING) and playable_dests.has_type(LocationType.TABLEAU):
-                        has_useful_moves = True
-                        break
-
-                    # otherwise, would the move meaningfully increase the number
-                    # of playable-to cards of revealed cards rank and color?
-                    # TODO: modularize this? at least two are identical, there
-                    # is one in block above
-                    opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                    if st_after_move.meaningfully_increases_dests_for(opp):
-                        has_useful_moves = True
-                        break
-
-                # otherwise, would the move meaningfully increase the number of
-                # playable-to foundation piles of moved card's rank and suit?
-                next = Card(t.top().suit, t.top().rank + 1)
-                if st_after_move.meaningfully_increases_dests_for(next, where_dest_type=LocationType.FOUNDATION):
-                    has_useful_moves = True
-                    break
-
-            if has_useful_moves:
-                return True
-
-            # - AND For all full-stack moves from tableau, it is not true that
-            #   - the move reveals a hidden card
-            #   - OR the move reveals a blank space such that the total number of
-            #     blank spaces would be less than/equal to the number of currently
-            #     playable kings in stock or tableau or foundation, AND the top of
-            #     stack is not a king.
-            for m in full_stack_moves:
-                t = st.tableau_from_location(m.source)
-                st_after_move = self.state_with_turn_applied(m)
-
-                # does it reveal a hidden card? it will if there's anything
-                # under it
-                if len(t.hidden) > 0:
-                    has_useful_moves = True
-                    break
-
-                # or, does it reveal a space that lets more kings play, and it
-                # isn't itself a king?
-                elif t.top().rank != Rank.KING and st_after_move.meaningfully_increases_dests_for(Card.kings()):
-                    has_useful_moves = True
-                    break
-
-            if has_useful_moves:
-                return True
-
-            # - AND For all non-full-stack moves from tableau, it is not true that:
-            #   - the move reveals a non-hidden card such that the total number of that
-            #     particular rank and color of card that can be played to would be
-            #     less than/equal to the number of currently playable opposite color
-            #     and -1 rank cards in stock or tableau or foundation, excluding the
-            #     top of the moved stack.
-            #   - OR the move reveals a non-hidden card which:
-            #     - Itself is playable to foundation
-            #     - OR is playable to another stack
-            #       - AND the revealed card is not a king on an empty.
-            for m in split_stack_moves:
-                t = st.tableau_from_location(m.source)
-                st_after_move = self.state_with_turn_applied(m)
-                t_after_move = st_after_move.tableau_from_location(m.source)
-                revealed_card = t_after_move.top()
-
-                # does it reveal a card that would increase playable-to slots?
-                opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
-                if st_after_move.meaningfully_increases_dests_for(opp, playable_from_prior=True):
-                    has_useful_moves = True
-                    break
-
-                playable_dests = st_after_move.playable_destinations(revealed_card)
-
-                # does it reveal a card that is playable to a foundation?
-                if playable_dests.has_type(LocationType.FOUNDATION):
-                    has_useful_moves = True
-                    break
-
-                # otherwise, does it reveal a non-king on an empty slot that is
-                # playable to another stack?
-                if (not len(t_after_move.hidden) == 0 or not revealed_card.rank == Rank.KING) and playable_dests.has_type(LocationType.TABLEAU):
-                    has_useful_moves = True
-                    break
-
-            if has_useful_moves:
-                return True
-
-            # - AND For all accessible cards from stock, it is not true that:
-            #   - it is playable to tableau or foundation
-            for c in st.accessible_stock_cards:
-                if st.playable_destinations(c).len() > 0:
-                    has_useful_moves = True
-                    break
-
-        return has_useful_moves
+        return True
             
     @property
     def hand(self) -> Deck:
@@ -1313,6 +1336,8 @@ class Game(BaseGame):
         Get the state that would result from playing the given move, without
         changing self.
         """
+
+        # NOTE: do NOT call state.after here, as it will call this function
         self.take_turn(self.current_player, action)
         s = self.state.clone()
         self.undo()
