@@ -31,20 +31,38 @@ class LocationList(list[Location]):
                 return True
         return False
     
+    def find(self, type: Location | str | LocationType | None=None) -> 'LocationList':
+        no_filters = type is None
+            
+        if type is not None:
+            if isinstance(type, str):
+                type = LocationType[type.upper()] 
+            elif isinstance(type, Location):
+                type = type.type
+            elif not isinstance(type, LocationType):
+                raise ValueError("Invalid type value, must be Location, str, or LocationType")
+
+        def cond(loc: Location) -> bool:
+            if no_filters:
+                return True
+            else:
+                if type is not None and loc.type != type:
+                    return False
+                return True
+
+        # filter it by cond
+        matches = LocationList()
+        for loc in self:
+            if cond(loc):
+                matches.append(loc)
+
+        return matches
+    
     def len(self) -> int:
         return len(self)
     
 class CardList(list[Card]):
     def find(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None) -> 'CardList':
-        """
-        Return the locations of all cards that are currently playable as a
-        single card (i.e. excluding the backs of multi-card stacks) that match
-        the given conditions (color, suit, and/or rank). If no conditions are
-        given, all playable single card locations are returned.
-
-        Note that if in_waste is enabled, it will check only the top card in
-        the waste pile, and will not consider any further ones.
-        """
         no_filters = color is None and suit is None and rank is None
 
         if color is not None:
@@ -1127,10 +1145,11 @@ class Game(BaseGame):
                     has_useful_moves = True
                     break
 
+                st_after_move = self.state_with_turn_applied(m)
+
                 # does it reveal a non-hidden card...
                 if len(t.shown) > 1:
                     reavealed_card = t.shown[1]
-                    st_after_move = self.state_with_turn_applied(m)
                     playable_dests = st_after_move.playable_destinations(reavealed_card)
 
                     #  ...that is playable to foundation?
@@ -1139,10 +1158,24 @@ class Game(BaseGame):
                         break
                     
                     # ...or that is playable to another stack and is not the king on an empty?
-                    elif (not len(t.hidden) == 0 or not revealed_card.rank == Rank.KING) and any(l.type == LocationType.TABLEAU for l in playable_dests):
+                    elif (not len(t.hidden) == 0 or not revealed_card.rank == Rank.KING) and playable_dests.has_type(LocationType.TABLEAU):
                         has_useful_moves = True
                         break
 
+                    # otherwise, would the move meaningfully increase the number
+                    # of playable-to cards of revealed cards rank and color?
+                    # TODO: modularize this? at least two are identical, there
+                    # is one in block above
+                    opp = Card(Suit.CLUBS if moved_card.suit.red() else Suit.DIAMONDS, moved_card.rank - 1)
+                    playable_to_count = st_after_move.playable_destinations(opp).len()
+                    playable_count = st_after_move.find_playable_singles(color=opp.color(), rank=opp.rank, in_waste=False).len()
+                    playable_count += st_after_move.accessible_stock_cards.find(color=opp.color(), rank=opp.rank).len()
+                    if playable_to_count <= playable_count:
+                        has_useful_moves = True
+                        break
+
+                # otherwise, would the move meaningfully increase the number of
+                # playable-to foundation piles of that card's rank and suit?
 
 
                 # AI nonsense below this point.
