@@ -986,6 +986,9 @@ class State:
                 board += border
         board += '\n'
 
+        if not self.has_useful_moves():
+            board += "(NO MOVES DETECTED)\n"
+
         return board
 
     def legal_moves(self) -> list[Action]:
