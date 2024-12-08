@@ -1366,7 +1366,7 @@ class HumanPlayer(BasePlayer):
         self.rules = rules
 
     def next_move(self, s: State) -> Action:
-        #cio.clear()
+        cio.clear()
         print(s.board())
 
         moves = [(m, str(m)) for m in s.legal_moves()]
