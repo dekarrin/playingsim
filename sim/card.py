@@ -172,16 +172,24 @@ class Card:
     hearts, or spades, and rank of Ace through King.
     """
 
-    def __init__(self, rank: Rank | Any, suit: Suit | Any):
-        if isinstance(suit, Suit):
-            self.suit = suit
-        else:
-            self.suit = CustomSuit(str(suit))
-
+    def __init__(self, rank: Rank | CustomRank | int | Any, suit: Suit | CustomSuit | int | Any):
         if isinstance(rank, Rank):
             self.rank = rank
+        elif isinstance(rank, CustomRank):
+            self.rank = rank
+        elif isinstance(rank, int):
+            self.rank = Rank(rank)
         else:
             self.rank = CustomRank(str(rank))
+
+        if isinstance(suit, Suit):
+            self.suit = suit
+        elif isinstance(suit, CustomSuit):
+            self.suit = suit
+        elif isinstance(suit, int):
+            self.suit = Suit(suit)
+        else:
+            self.suit = CustomSuit(str(suit))
 
     @classmethod
     def kings(cls) -> list['Card']:
