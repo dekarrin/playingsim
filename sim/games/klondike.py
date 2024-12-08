@@ -312,6 +312,12 @@ class MoveOneAction(Action):
     def __str__(self):
         return f"Move {self.source} card to {self.dest}"
 
+class LocationList(list[Location]):
+    def has_type(self, t: LocationType) -> bool:
+        for loc in self:
+            if loc.type == t:
+                return True
+        return False
 
 class State:
     def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0, draw_count: int=0):
@@ -434,12 +440,12 @@ class State:
             pass_limit=self.pass_limit
         )
     
-    def playable_destinations(self, c: Card) -> list[Location]:
+    def playable_destinations(self, c: Card) -> LocationList:
         """
         Return a list of all locations where the given card could be legally
         played to in this state.
         """
-        locs = list()
+        locs = LocationList()
         
         # foundation piles
         for s, f in self.foundations.items():
@@ -469,7 +475,7 @@ class State:
         else:
             raise ValueError("Invalid location type")
     
-    def find_playable_singles(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None, in_foundations: bool=True, in_tableau: bool=True, in_waste: bool=True) -> list[Location]:
+    def find_playable_singles(self, color: None | Card | str | Suit=None, suit: None | Card | str | Suit=None, rank: None | Card | str | int | Rank=None, in_foundations: bool=True, in_tableau: bool=True, in_waste: bool=True) -> LocationList:
         """
         Return the locations of all cards that are currently playable as a
         single card (i.e. excluding the backs of multi-card stacks) that match
@@ -527,7 +533,7 @@ class State:
                     return False
                 return True
 
-        locs = list()
+        locs = LocationList()
 
         # build list of all possible locations then filter by condition
 
@@ -1034,7 +1040,7 @@ class Game(BaseGame):
             for m in tableau_to_foundation_moves:
                 t = st.tableau_from_location(m.source)
 
-                # does it reveal a hidden card? it will if its the last
+                # does it reveal a hidden card? it will if it's the last
                 # non-hidden card from the tableau, and tableau has at least one
                 # hidden card. don't check for an empty-cell reveal; that is
                 # handled by another check.
@@ -1044,8 +1050,21 @@ class Game(BaseGame):
 
                 # does it reveal a non-hidden card...
                 if len(t.shown) > 1:
-                    #  that is playable to foundation?
-                    reavealed_card = t.shown[-2]
+                    reavealed_card = t.shown[1]
+                    st_after_move = self.state_with_turn_applied(m)
+                    playable_dests = st_after_move.playable_destinations(reavealed_card)
+
+                    #  ...that is playable to foundation?
+                    if any(l.type == LocationType.FOUNDATION for l in playable_dests):
+                        has_useful_moves = True
+                        break
+                    
+                    # ...or that is playable to another stack and is not the king on an empty?
+                    elif (not len(t.hidden) == 0 or not revealed_card.rank == Rank.KING) and any(l.type == LocationType.TABLEAU for l in playable_dests):
+                        has_useful_moves = True
+                        break
+
+
 
                 # AI nonsense below this point.
 
