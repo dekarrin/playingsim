@@ -25,6 +25,13 @@ class Deck:
     
     def __repr__(self) -> str:
         return f"Deck({repr(self.cards)})"
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Deck):
+            return self.cards == other.cards
+        elif isinstance(other, list):
+            return self.cards == other
+        return False
     
     def shuffle(self):
         """Shuffle the deck. Note according to docs for random.shuffle, if we

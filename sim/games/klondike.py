@@ -331,7 +331,11 @@ class TableauPosition(Location):
         return f"T{self.pile}"
     
     def __eq__(self, other) -> bool:
-
+        if not isinstance(other, TableauPosition):
+            return False
+        if not super().__eq__(other):
+            return False
+        return self.pile == other.pile
 
 class WastePosition(Location):
     def __init__(self):
@@ -339,6 +343,11 @@ class WastePosition(Location):
 
     def __str__(self):
         return "waste pile"
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, WastePosition):
+            return False
+        return super().__eq__(other)
 
 
 class FoundationPosition(Location):
@@ -348,6 +357,13 @@ class FoundationPosition(Location):
 
     def __str__(self):
         return f"{self.suit.name.lower()} pile"
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, FoundationPosition):
+            return False
+        if not super().__eq__(other):
+            return False
+        return self.suit == other.suit
 
 
 class Action:
@@ -362,7 +378,7 @@ class Action:
             return False
         return self.type < other.type
 
-    def __eq__(self, other: 'Action') -> bool:
+    def __eq__(self, other) -> bool:
         if not isinstance(other, Action):
             return False
         return self.type == other.type
@@ -377,6 +393,11 @@ class DrawAction(Action):
 
     def __str__(self):
         return "Draw a card"
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, DrawAction):
+            return False
+        return super().__eq__(other)
 
 class MoveTableauStackAction(Action):
     def __init__(self, source_pile: int, dest_pile: int, count: int):
@@ -405,6 +426,19 @@ class MoveTableauStackAction(Action):
 
     def __str__(self):
         return "Move T{:d} -> T{:d}, stack of {:d}".format(self.source_pile, self.dest_pile, self.count)
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, MoveTableauStackAction):
+            return False
+        if not super().__eq__(other):
+            return False
+        if self.source_pile != other.source_pile:
+            return False
+        if self.dest_pile != other.dest_pile:
+            return False
+        if self.count != other.count:
+            return False
+        return True
     
     def splits_stack(self, state: 'State') -> bool:
         """
@@ -440,6 +474,17 @@ class MoveOneAction(Action):
         
     def __str__(self):
         return f"Move {self.source} card to {self.dest}"
+    
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, MoveOneAction):
+            return False
+        if not super().__eq__(other):
+            return False
+        if self.source != other.source:
+            return False
+        if self.dest != other.dest:
+            return False
+        return True
 
 class State:
     def __init__(self, tableau: list[Pile], foundations: dict[Suit, Foundation], stock: Deck, waste: Deck, current_stock_pass: int, pass_limit: int=0, draw_count: int=0):
