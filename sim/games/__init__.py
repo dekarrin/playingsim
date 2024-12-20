@@ -1,4 +1,5 @@
-
+from typing import Type
+import inspect
 
 class RulesError(Exception):
     pass
@@ -19,9 +20,29 @@ class Result:
 class Player:
     def next_move(self, state: any) -> any:
         raise NotImplementedError('next_move not implemented')
+    
+
+class Rules:
+    def __init__(self, game: 'Type[Game]'):
+        self._game = game
+
+    @property
+    def game(self) -> 'Type[Game]':
+        return self._game
+    
+    def as_dict(self) -> dict:
+        raise NotImplementedError()
 
 
 class Game:
+
+    @classmethod
+    def from_rules(cls, rules: Rules) -> 'Game':
+        """
+        Default implementation, intended for subclasses to override.
+        """
+        raise NotImplementedError()
+
     def take_turn(self, player: int, move: any) -> None:
         """
         Take turn executes the given move for the given player. The move
@@ -45,12 +66,17 @@ class Game:
         raise NotImplementedError()
     
     @property
-    def rules(self) -> dict:
+    def rules(self) -> Rules:
         """
         Return a dict containing information about parameters of the current
         game that may difer from others of the same type. For instance, whether
         turn 3 or turn 1 is set in Klondike solitaire.
         """
+        raise NotImplementedError()
+    
+    @property
+    def name(self) -> str:
+        """Return the name of the game."""
         raise NotImplementedError()
     
     @property

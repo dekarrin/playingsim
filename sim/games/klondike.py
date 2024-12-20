@@ -1,6 +1,6 @@
 from ..card import Card, Suit, Rank
 from ..deck import Deck
-from . import RulesError, Game as BaseGame, Player as BasePlayer, Result
+from . import RulesError, Game as BaseGame, Player as BasePlayer, Result, Rules as BaseRules
 from .. import cio, UndoAction
 
 from enum import Enum, IntEnum, auto
@@ -1121,6 +1121,32 @@ class State:
                     moves.append(MoveOneAction(FoundationPosition(s), TableauPosition(i)))
         
         return moves
+    
+
+class Rules(BaseRules):
+    def __init__(self, draw_count: int, stock_pass_limit: int, starting_deck: Deck, random_deck: bool, num_piles: int):
+        super().__init__(Game)
+        self.draw_count = draw_count
+        self.stock_pass_limit = stock_pass_limit
+        self.starting_deck = starting_deck
+        self.random_deck = random_deck
+        self.num_piles = num_piles
+        
+        deck_info = self.get('deck', None)
+        self._starting_deck = deck_info.get('cards', None) if deck_info is not None else None
+        self._random_deck = deck_info.get('type', 'random') == 'random' if deck_info is not None else True
+        self._num_piles = self.get('num_piles', 7)
+
+    def as_dict(self) -> dict:
+        return {
+            'draw_count': self.draw_count,
+            'stock_pass_limit': self.stock_pass_limit,
+            'deck': {
+                'type': 'random' if self.random_deck else 'fixed',
+                'cards': [str(c) for c in self.starting_deck]
+            },
+            'num_piles': len(self.tableau)
+        }
 
 
 class Game(BaseGame):
@@ -1150,6 +1176,11 @@ class Game(BaseGame):
             self.tableau.append(p)
         
         self.history.append(self.state)
+
+    @classmethod
+    def from_rules(cls, rules: Rules) -> 'Game':
+        return Game(rules)
+        raise NotImplementedError()
 
 
     def take_turn(self, player: int, action: Action):
@@ -1372,16 +1403,14 @@ class Game(BaseGame):
         return Deck(self.waste.top_n(self.draw_count, or_fewer=True))
 
     @property
-    def rules(self) -> dict:
-        return {
-            'draw_count': self.draw_count,
-            'stock_pass_limit': self.stock_pass_limit,
-            'deck': {
-                'type': 'random' if self.random_deck else 'fixed',
-                'cards': [str(c) for c in self.starting_deck]
-            },
-            'num_piles': len(self.tableau)
-        }
+    def rules(self) -> Rules:
+        return Rules(
+            draw_count=self.draw_count,
+            stock_pass_limit=self.stock_pass_limit,
+            starting_deck=[str(c) for c in self.starting_deck],
+            random_deck=self.random_deck,
+            num_piles=len(self.tableau),
+        )
     
     @property
     def state(self) -> State:

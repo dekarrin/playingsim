@@ -4,12 +4,14 @@ import sim.runner
 import sim.games.klondike as klondike
 from sim.card import Card
 from sim.deck import Deck
+from sim.games import Game as BaseGame
 import sys
 
 import argparse
 import random
 
 def play_klondike(draw_count: int=1, stock_pass_limit: int=0, deck_seed: str | None=None, num_piles: int=7):
+
     deck = None
     if deck_seed is not None:
         random.seed(deck_seed)
