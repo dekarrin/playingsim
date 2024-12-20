@@ -1179,9 +1179,9 @@ class Game(BaseGame):
 
     @classmethod
     def from_rules(cls, rules: Rules) -> 'Game':
-        return Game(rules)
-        raise NotImplementedError()
-
+        g = Game(draw_count=rules.draw_count, stock_pass_limit=rules.stock_pass_limit, deck=rules.starting_deck, num_piles=rules.num_piles)
+        g.random_deck = rules.random_deck
+        return g
 
     def take_turn(self, player: int, action: Action):
         """
